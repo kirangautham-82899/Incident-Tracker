@@ -21,7 +21,6 @@ import useAuthStore from './stores/authStore';
 import useIncidentStore from './stores/incidentStore';
 import socketService from './utils/socket';
 import notificationService from './utils/notificationService';
-import { ThemeProvider } from './contexts/ThemeContext';
 import { isStaff, STATUS_LABELS } from './utils/constants';
 import { sameId } from './utils/helpers';
 
@@ -108,7 +107,6 @@ function App() {
   useRealtime();
 
   return (
-    <ThemeProvider>
       <BrowserRouter>
         <Toaster
           position="top-right"
@@ -156,7 +154,6 @@ function App() {
         </Routes>
         </Suspense>
       </BrowserRouter>
-    </ThemeProvider>
   );
 }
 

@@ -68,7 +68,7 @@ ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=change-me npm run create-admin --pref
 
 The tables are created automatically on startup (`npm run db:migrate --prefix backend` does the same by hand, or paste `backend/db/schema.sql` into the Supabase SQL editor). Row Level Security is enabled on every table with no policies, so Supabase's public REST API (anon key) cannot read or write them; all access goes through this backend.
 
-The frontend reads `frontend/.env.development` in dev (points at `localhost:5000`); production values come from Vercel environment variables.
+The frontend uses `frontend/.env.development` for `npm run dev` (API on `localhost:5000`) and `frontend/.env.production` for builds (same-origin `/api`). Neither contains secrets. Backend secrets live only in `backend/.env` (git-ignored) and in Vercel environment variables.
 
 ## Environment variables
 
