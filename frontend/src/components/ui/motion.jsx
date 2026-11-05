@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, useInView, useMotionValue, useSpring, useReducedMotion } from 'motion/react';
 
 export const EASE = [0.22, 1, 0.36, 1];
@@ -16,14 +16,43 @@ export const PageTransition = ({ children, className = '' }) => (
     </motion.main>
 );
 
-// Fades/slides children in when they scroll into view
+/**
+ * Fades/slides children in once they reach the viewport. Anything that is in
+ * view or already scrolled past is shown, so content is never left invisible
+ * when the user jumps (anchor links, fast scroll, back navigation).
+ */
+export const useRevealed = (offset = 60) => {
+    const ref = useRef(null);
+    const [shown, setShown] = useState(false);
+
+    useEffect(() => {
+        if (shown) return undefined;
+        const check = () => {
+            const rect = ref.current?.getBoundingClientRect();
+            if (rect && rect.top < window.innerHeight - offset) setShown(true);
+        };
+        check();
+        window.addEventListener('scroll', check, { passive: true });
+        window.addEventListener('resize', check);
+        window.addEventListener('hashchange', check);
+        return () => {
+            window.removeEventListener('scroll', check);
+            window.removeEventListener('resize', check);
+            window.removeEventListener('hashchange', check);
+        };
+    }, [shown, offset]);
+
+    return [ref, shown];
+};
+
 export const Reveal = ({ children, delay = 0, y = 16, className = '', as = 'div' }) => {
     const Comp = motion[as] || motion.div;
+    const [ref, shown] = useRevealed();
     return (
         <Comp
+            ref={ref}
             initial={{ opacity: 0, y }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
+            animate={shown ? { opacity: 1, y: 0 } : { opacity: 0, y }}
             transition={{ duration: 0.6, ease: EASE, delay }}
             className={className}
         >

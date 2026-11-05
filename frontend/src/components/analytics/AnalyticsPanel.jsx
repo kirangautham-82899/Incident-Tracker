@@ -43,8 +43,7 @@ const Breakdown = ({ rows, total }) => (
                             className="h-full rounded-full"
                             style={{ background: row.color }}
                             initial={{ width: 0 }}
-                            whileInView={{ width: `${pct}%` }}
-                            viewport={{ once: true }}
+                            animate={{ width: `${pct}%` }}
                             transition={{ duration: 0.9, ease: EASE, delay: i * 0.05 }}
                         />
                     </div>

@@ -25,12 +25,12 @@ const emptyForm = (user) => ({
 });
 
 // Numbered step: big index on the left, content on the right, hairline on top
+// Animates on mount (not on scroll) so no field can stay hidden if the user scrolls or jumps past it
 const Step = ({ n, title, hint, error, children }) => (
     <motion.section
         initial={{ opacity: 0, y: 14 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-40px' }}
-        transition={{ duration: 0.5, ease: EASE }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: EASE, delay: 0.1 + (Number(n) - 1) * 0.06 }}
         className="grid gap-6 border-t border-line py-10 md:grid-cols-[200px_1fr]"
     >
         <div>

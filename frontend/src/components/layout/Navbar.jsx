@@ -71,8 +71,8 @@ const Navbar = () => {
     return (
         <header
             className={cx(
-                'sticky top-0 z-[1100] transition-[background-color,border-color,backdrop-filter] duration-300',
-                scrolled || open ? 'border-b border-line bg-paper/85 backdrop-blur-xl' : 'border-b border-transparent bg-paper/0'
+                'sticky top-0 z-[1100] transition-[border-color] duration-300',
+                'bg-paper/85 backdrop-blur-xl', scrolled || open ? 'border-b border-line' : 'border-b border-transparent'
             )}
         >
             <nav className="mx-auto flex h-16 max-w-page items-center justify-between gap-6 px-5 sm:px-8" aria-label="Main">
