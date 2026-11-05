@@ -2,19 +2,50 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import multer from 'multer';
-import { v2 as cloudinary } from 'cloudinary';
+import { createClient } from '@supabase/supabase-js';
 import { asyncHandler, ApiError } from '../middleware/errorHandler.js';
 
 export const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads');
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 5;
+const BUCKET = () => process.env.SUPABASE_STORAGE_BUCKET || 'incident-media';
 
-const cloudinaryConfigured = () =>
-    Boolean(process.env.CLOUDINARY_CLOUD_NAME &&
-        process.env.CLOUDINARY_API_KEY &&
-        process.env.CLOUDINARY_API_SECRET &&
-        process.env.CLOUDINARY_CLOUD_NAME !== 'your_cloud_name');
+const supabaseConfigured = () => Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+let supabase = null;
+let bucketReady = null;
+
+const getSupabase = () => {
+    if (!supabase) {
+        supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false }
+        });
+    }
+    return supabase;
+};
+
+// Create the public bucket on first use if it does not exist yet
+const ensureBucket = () => {
+    if (!bucketReady) {
+        bucketReady = (async () => {
+            const client = getSupabase();
+            const { data } = await client.storage.getBucket(BUCKET());
+            if (!data) {
+                const { error } = await client.storage.createBucket(BUCKET(), {
+                    public: true,
+                    fileSizeLimit: MAX_FILE_SIZE,
+                    allowedMimeTypes: ['image/*', 'video/*']
+                });
+                if (error && !/already exists/i.test(error.message)) throw error;
+            }
+        })().catch((err) => {
+            bucketReady = null;
+            throw err;
+        });
+    }
+    return bucketReady;
+};
 
 export const upload = multer({
     storage: multer.memoryStorage(),
@@ -28,18 +59,26 @@ export const upload = multer({
     }
 });
 
-const uploadToCloudinary = (file) => new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-        { folder: 'incident-tracker', resource_type: 'auto' },
-        (error, result) => (error ? reject(error) : resolve(result.secure_url))
-    );
-    stream.end(file.buffer);
-});
+const fileName = (file) => {
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 8);
+    return `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
+};
+
+const uploadToSupabase = async (file) => {
+    await ensureBucket();
+    const client = getSupabase();
+    const objectPath = `incidents/${new Date().toISOString().slice(0, 10)}/${fileName(file)}`;
+    const { error } = await client.storage.from(BUCKET()).upload(objectPath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false
+    });
+    if (error) throw new ApiError(502, `Upload failed: ${error.message}`);
+    return client.storage.from(BUCKET()).getPublicUrl(objectPath).data.publicUrl;
+};
 
 const saveLocally = async (file, req) => {
     await fs.promises.mkdir(UPLOAD_DIR, { recursive: true });
-    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 8);
-    const name = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
+    const name = fileName(file);
     await fs.promises.writeFile(path.join(UPLOAD_DIR, name), file.buffer);
     const base = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
     return `${base}/uploads/${name}`;
@@ -54,31 +93,21 @@ export const uploadMedia = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'No files uploaded');
     }
 
-    const useCloudinary = cloudinaryConfigured();
+    const useSupabase = supabaseConfigured();
     // Serverless hosts have no persistent disk: local storage would silently lose files
-    if (!useCloudinary && process.env.VERCEL) {
-        throw new ApiError(501, 'Media uploads are not configured on this server (set the CLOUDINARY_* variables)');
-    }
-    if (useCloudinary) {
-        cloudinary.config({
-            cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-            api_key: process.env.CLOUDINARY_API_KEY,
-            api_secret: process.env.CLOUDINARY_API_SECRET
-        });
+    if (!useSupabase && process.env.VERCEL) {
+        throw new ApiError(501, 'Media uploads are not configured on this server (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)');
     }
 
     const media = [];
     for (const file of files) {
-        const url = useCloudinary ? await uploadToCloudinary(file) : await saveLocally(file, req);
-        media.push({
-            type: file.mimetype.startsWith('video/') ? 'video' : 'image',
-            url
-        });
+        const url = useSupabase ? await uploadToSupabase(file) : await saveLocally(file, req);
+        media.push({ type: file.mimetype.startsWith('video/') ? 'video' : 'image', url });
     }
 
     res.status(201).json({
         success: true,
-        storage: useCloudinary ? 'cloudinary' : 'local',
+        storage: useSupabase ? 'supabase' : 'local',
         data: media
     });
 });

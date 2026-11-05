@@ -1,21 +1,19 @@
 /**
- * End-to-end API tests against an in-memory MongoDB.
+ * End-to-end API tests against a throwaway local PostgreSQL.
  * Run: npm test
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'http';
-import { MongoMemoryServer } from 'mongodb-memory-server';
-import mongoose from 'mongoose';
+import { startLocalPostgres } from '../scripts/local-postgres.js';
 
 process.env.JWT_SECRET = 'test-secret';
 process.env.NODE_ENV = 'test';
 
-const { createApp } = await import('../src/app.js');
-const { default: User } = await import('../src/models/User.js');
-const { default: Incident } = await import('../src/models/Incident.js');
-
-let mongo;
+let db;
+let createApp;
+let query;
+let closeDatabase;
 let server;
 let base;
 
@@ -38,7 +36,7 @@ const register = async (name, email) => {
 };
 
 const promote = async (email, role) => {
-    await User.updateOne({ email }, { role });
+    await query('update users set role = $1 where email = $2', [role, email]);
     const res = await call('POST', '/api/auth/login', { body: { email, password: 'secret123' } });
     return res.body.data.token;
 };
@@ -53,10 +51,12 @@ const incidentBody = (overrides = {}) => ({
 });
 
 before(async () => {
-    mongo = await MongoMemoryServer.create();
-    await mongoose.connect(mongo.getUri());
-    await Incident.createIndexes();
-    await User.createIndexes();
+    db = await startLocalPostgres();
+    process.env.DATABASE_URL = db.url;
+    const database = await import('../src/config/database.js');
+    await database.ensureDatabase();
+    ({ query, closeDatabase } = database);
+    ({ createApp } = await import('../src/app.js'));
     const app = createApp();
     server = createServer(app);
     await new Promise(resolve => server.listen(0, resolve));
@@ -65,8 +65,8 @@ before(async () => {
 
 after(async () => {
     server?.close();
-    await mongoose.disconnect();
-    await mongo?.stop();
+    await closeDatabase?.();
+    await db?.stop();
 });
 
 let citizen, other, third, adminToken, responderToken, responderId, incidentId;
@@ -243,4 +243,43 @@ test('admin can delete an incident', async () => {
     assert.equal(res.status, 200);
     const gone = await call('GET', `/api/incidents/${incidentId}`);
     assert.equal(gone.status, 404);
+});
+
+test('malformed ids return 404 instead of crashing', async () => {
+    assert.equal((await call('GET', '/api/incidents/not-a-uuid')).status, 404);
+    assert.equal((await call('GET', '/api/incidents/123/comments')).body.count, 0);
+    assert.equal((await call('POST', '/api/incidents/not-a-uuid/verify', { token: other.token })).status, 404);
+});
+
+test('duplicate email registration is rejected', async () => {
+    const res = await call('POST', '/api/auth/register', {
+        body: { name: 'Again', email: 'C1@test.com', password: 'secret123' }
+    });
+    assert.equal(res.status, 400);
+});
+
+test('search matches the short ID shown in the UI', async () => {
+    const created = await call('POST', '/api/incidents', {
+        token: citizen.token,
+        body: incidentBody({ type: 'medical', title: 'Fainted at the station', location: { coordinates: [72.8777, 19.076] } })
+    });
+    const shortId = created.body.data._id.slice(-6).toUpperCase();
+    const res = await call('GET', `/api/incidents?search=%23${shortId}`);
+    assert.equal(res.body.total, 1);
+    assert.equal(res.body.data[0]._id, created.body.data._id);
+});
+
+test('deleting an incident cascades to comments', async () => {
+    const created = await call('POST', '/api/incidents', { token: citizen.token, body: incidentBody({ type: 'other', location: { coordinates: [10, 10] } }) });
+    const id = created.body.data._id;
+    await call('POST', `/api/incidents/${id}/comments`, { token: citizen.token, body: { content: 'hello' } });
+    await call('DELETE', `/api/incidents/${id}`, { token: adminToken });
+    const { rows } = await query('select count(*) as n from comments where incident_id = $1', [id]);
+    assert.equal(rows[0].n, 0);
+});
+
+test('schema migration is idempotent', async () => {
+    const { migrate } = await import('../src/config/database.js');
+    await migrate();
+    await migrate();
 });

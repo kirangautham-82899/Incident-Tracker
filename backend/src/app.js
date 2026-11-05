@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
-import mongoose from 'mongoose';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { UPLOAD_DIR } from './controllers/uploadController.js';
+import { isDatabaseHealthy } from './config/database.js';
 
 import authRoutes from './routes/auth.js';
 import incidentRoutes from './routes/incidents.js';
@@ -33,8 +33,6 @@ export const corsOptions = {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 };
-
-const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
 
 export const createApp = ({ beforeRoutes } = {}) => {
     const app = express();
@@ -69,8 +67,8 @@ export const createApp = ({ beforeRoutes } = {}) => {
         });
     });
 
-    app.get('/api/health', (req, res) => {
-        const database = DB_STATES[mongoose.connection.readyState] || 'unknown';
+    app.get('/api/health', async (req, res) => {
+        const database = (await isDatabaseHealthy()) ? 'connected' : 'disconnected';
         res.status(database === 'connected' ? 200 : 503).json({
             status: database === 'connected' ? 'OK' : 'DEGRADED',
             timestamp: new Date().toISOString(),

@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import { findUserById } from '../db/users.js';
 import { STAFF_ROLES } from '../config/constants.js';
 import chatbot from './chatbot.js';
 
@@ -14,7 +14,7 @@ export const emitIncidentEvent = (req, event, incident, { staffOnly = false } = 
     const io = req.app.get('io');
     if (!io || !incident) return;
 
-    const full = incident.toJSON();
+    const full = incident;
     io.to(STAFF_ROOM).emit(event, full);
 
     if (staffOnly) return;
@@ -49,9 +49,9 @@ export const setupSocket = (io) => {
         if (token) {
             try {
                 const decoded = jwt.verify(token, process.env.JWT_SECRET);
-                const user = await User.findById(decoded.id).select('name role isActive');
-                if (user && user.isActive) {
-                    socket.data.user = { _id: user._id.toString(), name: user.name, role: user.role };
+                const user = await findUserById(decoded.id);
+                if (user && user.is_active) {
+                    socket.data.user = { _id: user.id, name: user.name, role: user.role };
                 }
             } catch {
                 // Invalid token: continue as guest

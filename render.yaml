@@ -1,13 +1,13 @@
 # Render Blueprint: deploys the API (with Socket.IO) as a web service.
 # Render dashboard -> New -> Blueprint -> pick this repo.
-# You will be asked for MONGODB_URI (and optional Cloudinary keys).
+# You will be asked for your Supabase values.
 services:
   - type: web
     name: incident-tracker-api
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install
+    buildCommand: npm install --omit=dev
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -15,13 +15,11 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
-      - key: MONGODB_URI
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: FRONTEND_URL
-        sync: false
-      - key: CLOUDINARY_CLOUD_NAME
-        sync: false
-      - key: CLOUDINARY_API_KEY
-        sync: false
-      - key: CLOUDINARY_API_SECRET
-        sync: false
+        value: https://incident-tracker-alpha.vercel.app

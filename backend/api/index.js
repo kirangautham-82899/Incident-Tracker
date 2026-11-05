@@ -4,31 +4,13 @@
  * Vercel functions are short-lived, so Socket.IO (live push + community chat)
  * is not available here; the frontend automatically falls back to polling.
  * For full real-time features run `npm start` on a persistent host instead
- * (Railway, Render, Fly.io, a VM...).
+ * (Render, Railway, Fly.io, a VM...).
+ *
+ * Use Supabase's *transaction pooler* connection string (port 6543) as
+ * DATABASE_URL here, and set DB_POOL_SIZE=1.
  */
-import mongoose from 'mongoose';
 import { createApp } from '../src/app.js';
-
-let connection = null;
-
-const connect = () => {
-    if (!process.env.MONGODB_URI) {
-        throw new Error('MONGODB_URI is not configured');
-    }
-    if (!connection) {
-        connection = mongoose
-            .connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000 })
-            .then(async (conn) => {
-                await Promise.all(Object.values(mongoose.models).map(m => m.createIndexes().catch(() => {})));
-                return conn;
-            })
-            .catch((err) => {
-                connection = null; // retry on next request
-                throw err;
-            });
-    }
-    return connection;
-};
+import { ensureDatabase } from '../src/config/database.js';
 
 const app = createApp({
     beforeRoutes: async (req, res, next) => {
@@ -36,7 +18,7 @@ const app = createApp({
             return res.status(500).json({ success: false, error: 'JWT_SECRET is not configured' });
         }
         try {
-            await connect();
+            await ensureDatabase();
             next();
         } catch (error) {
             console.error('Database connection failed:', error.message);

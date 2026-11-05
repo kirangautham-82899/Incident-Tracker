@@ -16,23 +16,19 @@ export const errorHandler = (err, req, res, next) => {
     let statusCode = err.statusCode || 500;
     let message = err.message || 'Server Error';
 
-    // Mongoose bad ObjectId
-    if (err.name === 'CastError') {
+    // PostgreSQL errors
+    if (err.code === '23505') { // unique_violation
+        statusCode = 400;
+        message = err.constraint === 'users_email_key' ? 'User already exists with this email' : 'Record already exists';
+    } else if (err.code === '23514' || err.code === '23502') { // check / not-null violation
+        statusCode = 400;
+        message = 'Invalid or missing field value';
+    } else if (err.code === '22P02') { // invalid text representation (e.g. bad uuid)
         statusCode = 404;
         message = 'Resource not found';
-    }
-
-    // Mongoose duplicate key
-    if (err.code === 11000) {
-        const field = Object.keys(err.keyPattern || {})[0] || 'Field';
+    } else if (err.code === '23503') { // foreign key violation
         statusCode = 400;
-        message = `${field} already exists`;
-    }
-
-    // Mongoose validation error
-    if (err.name === 'ValidationError') {
-        statusCode = 400;
-        message = Object.values(err.errors).map(val => val.message).join(', ');
+        message = 'Referenced record does not exist';
     }
 
     // Malformed JSON body

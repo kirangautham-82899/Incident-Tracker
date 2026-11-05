@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import { findUserById, toAuthUser } from '../db/users.js';
 
 const getToken = (req) => {
     const header = req.headers.authorization;
@@ -11,9 +11,9 @@ const getToken = (req) => {
 
 const loadUser = async (token) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
-    if (!user || !user.isActive) return null;
-    return user;
+    const user = await findUserById(decoded.id);
+    if (!user || !user.is_active) return null;
+    return toAuthUser(user);
 };
 
 // Protect routes - verify JWT token
