@@ -338,3 +338,40 @@ test('login is rate limited per IP', async () => {
         process.env.RATE_LIMIT_DISABLED = 'true';
     }
 });
+
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+const multipart = async (blob, name) => {
+    const form = new FormData();
+    form.append('files', blob, name);
+    const res = await fetch(`${base}/api/uploads`, { method: 'POST', body: form });
+    return { status: res.status, body: await res.json() };
+};
+
+test('multipart upload stores an image locally when Supabase is not configured', async () => {
+    const res = await multipart(new Blob([PNG_1PX], { type: 'image/png' }), 'pixel.png');
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.storage, 'local');
+    const [item] = res.body.data;
+    assert.equal(item.type, 'image');
+    assert.ok(item.url.startsWith(`${base}/uploads/`));
+    const served = await fetch(item.url);
+    assert.equal(served.status, 200);
+    assert.deepEqual(Buffer.from(await served.arrayBuffer()), PNG_1PX);
+    const { UPLOAD_DIR } = await import('../src/controllers/uploadController.js');
+    const { rm } = await import('fs/promises');
+    const { join } = await import('path');
+    await rm(join(UPLOAD_DIR, item.url.split('/uploads/')[1]), { force: true });
+});
+
+test('multipart upload rejects non-media files', async () => {
+    const res = await multipart(new Blob(['hello'], { type: 'text/plain' }), 'notes.txt');
+    assert.equal(res.status, 400);
+    assert.match(res.body.error, /image and video/i);
+});
+
+test('multipart upload rejects files over 10MB', async () => {
+    const big = new Blob([Buffer.alloc(10 * 1024 * 1024 + 1)], { type: 'image/png' });
+    const res = await multipart(big, 'huge.png');
+    assert.equal(res.status, 400);
+    assert.match(res.body.error, /too large/i);
+});

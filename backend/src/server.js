@@ -5,7 +5,7 @@ import connectDB from './config/database.js';
 import { createApp, corsOptions } from './app.js';
 import { setupSocket } from './utils/realtime.js';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 if (!process.env.JWT_SECRET) {
     if (process.env.NODE_ENV === 'production') {
