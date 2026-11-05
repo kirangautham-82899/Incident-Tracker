@@ -10,7 +10,7 @@ import {
 } from '../db/users.js';
 
 const generateToken = (id) =>
-    jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '30d' });
+    jwt.sign({ id }, process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
 // @desc    Register new user (always a citizen; staff roles are granted by an admin)
 // @route   POST /api/auth/register
@@ -80,5 +80,10 @@ export const updateMe = asyncHandler(async (req, res) => {
     }
 
     const user = await updateUser(req.user._id, updates);
-    res.status(200).json({ success: true, data: toPublicUser(user) });
+    // Changing the password signs out other sessions; give this one a fresh token
+    res.status(200).json({
+        success: true,
+        data: toPublicUser(user),
+        token: newPassword ? generateToken(user.id) : undefined
+    });
 });

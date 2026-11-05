@@ -117,6 +117,16 @@ The website and the API deploy together as **one Vercel project** from the repo 
 
 **Instant real-time instead of polling:** run `backend/` with `npm start` on a long-running host (Railway, Fly.io, a VM), then build the frontend with `VITE_API_URL=https://<api-host>/api`, `VITE_SOCKET_URL=https://<api-host>` and `VITE_ENABLE_SOCKET=true`.
 
+## Development workflow
+
+1. Work on a branch and open a pull request (or push small fixes to `main`).
+2. **CI** (`.github/workflows/ci.yml`) runs on every push and PR: backend tests on a real Postgres, frontend lint and build, and `npm audit` of production dependencies. **CodeQL** (`codeql.yml`) scans the code for security issues.
+3. **Vercel** builds a preview for every PR and deploys `main` to production (https://incident-tracker-alpha.vercel.app) automatically. Previews have no database secrets, so their API returns 503; use `npm run dev:local` for full local testing.
+4. **Dependabot** opens weekly PRs for dependency updates.
+5. Database schema changes go in `backend/db/schema.sql` (idempotent). Apply them to Supabase with `npm run db:migrate --prefix backend` **before** merging code that needs them.
+
+See [SECURITY.md](SECURITY.md) for the security model and how to report a vulnerability.
+
 ## API overview
 
 | Method | Path | Access |
@@ -143,7 +153,7 @@ Socket events: `incident_created`, `incident_updated`, `incident_verified`, `inc
 ## Tests
 
 ```bash
-npm test --prefix backend     # 21 end-to-end API tests on a real (embedded) Postgres
+npm test                      # 26 end-to-end API tests on a real (embedded) Postgres
 npm run lint --prefix frontend
 npm run build --prefix frontend
 ```

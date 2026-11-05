@@ -41,7 +41,10 @@ const validate = ({ name, email, password }, { partial = false } = {}) => {
         if (!EMAIL_RE.test(String(email ?? '').trim())) throw new ApiError(400, 'Please provide a valid email');
     }
     if (!partial || password !== undefined) {
-        if (String(password ?? '').length < 6) throw new ApiError(400, 'Password must be at least 6 characters');
+        const pw = String(password ?? '');
+        if (pw.length < 8 || pw.length > 128 || !/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) {
+            throw new ApiError(400, 'Password must be 8-128 characters and include a letter and a number');
+        }
     }
 };
 
@@ -58,7 +61,7 @@ export const findUserByEmail = async (email) => {
 
 export const createUser = async ({ name, email, password, phone, role = USER_ROLES.CITIZEN }) => {
     validate({ name, email, password });
-    const hash = await bcrypt.hash(password, 10);
+    const hash = await bcrypt.hash(password, 12);
     const { rows } = await query(
         `insert into users (name, email, password_hash, phone, role)
          values ($1, $2, $3, $4, $5) returning *`,
@@ -79,7 +82,10 @@ export const updateUser = async (id, { name, phone, password, role, isActive }) 
     };
     if (name !== undefined) add('name', String(name).trim());
     if (phone !== undefined) add('phone', phone ? String(phone).trim() : null);
-    if (password !== undefined) add('password_hash', await bcrypt.hash(password, 10));
+    if (password !== undefined) {
+        add('password_hash', await bcrypt.hash(password, 12));
+        sets.push('password_changed_at = now()');
+    }
     if (role !== undefined) add('role', role);
     if (isActive !== undefined) add('is_active', Boolean(isActive));
     if (sets.length === 0) return findUserById(id);

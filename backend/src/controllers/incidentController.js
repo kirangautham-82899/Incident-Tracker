@@ -54,10 +54,25 @@ const parseCoordinates = (location) => {
     return [lng, lat];
 };
 
-const sanitizeMedia = (media) => {
+// Media must point at our own storage (Supabase bucket or this API's /uploads),
+// so reports can't embed arbitrary third-party URLs (tracking pixels, malware links).
+const allowedMediaPrefixes = (req) => {
+    const prefixes = [];
+    if (process.env.SUPABASE_URL) {
+        const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'incident-media';
+        prefixes.push(`${process.env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public/${bucket}/`);
+    }
+    const base = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+    prefixes.push(`${base.replace(/\/$/, '')}/uploads/`);
+    return prefixes;
+};
+
+const sanitizeMedia = (media, req) => {
     if (!Array.isArray(media)) return [];
+    const prefixes = allowedMediaPrefixes(req);
     return media
-        .filter(m => m && typeof m.url === 'string' && /^https?:\/\//.test(m.url) && ['image', 'video'].includes(m.type))
+        .filter(m => m && typeof m.url === 'string' && ['image', 'video'].includes(m.type) &&
+            m.url.length < 500 && !m.url.includes('..') && prefixes.some(p => m.url.startsWith(p)))
         .slice(0, 5)
         .map(m => ({ type: m.type, url: m.url, uploadedAt: new Date().toISOString() }));
 };
@@ -107,7 +122,7 @@ export const createIncident = asyncHandler(async (req, res) => {
             reporterId: req.user?._id,
             reporterName: (req.user?.name || reporter?.name?.trim() || 'Anonymous').slice(0, 50),
             reporterContact: String(reporter?.contact || req.user?.phone || req.user?.email || '').slice(0, 100),
-            media: sanitizeMedia(media),
+            media: sanitizeMedia(media, req),
             duplicateOf: duplicates[0]?._id,
             priority: calculatePriority({ status: INCIDENT_STATUS.REPORTED, type, severity: finalSeverity })
         });

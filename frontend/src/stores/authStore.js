@@ -62,6 +62,12 @@ const useAuthStore = create(
             updateProfile: async (updates) => {
                 try {
                     const response = await api.put('/auth/me', updates);
+                    // A password change invalidates old tokens; keep this session on the new one
+                    if (response.data.token) {
+                        localStorage.setItem('token', response.data.token);
+                        set({ token: response.data.token });
+                        socketService.connect(response.data.token);
+                    }
                     set({ user: normalizeUser(response.data.data) });
                     return { success: true };
                 } catch (error) {

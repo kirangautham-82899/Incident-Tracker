@@ -10,9 +10,13 @@ const getToken = (req) => {
 };
 
 const loadUser = async (token) => {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     const user = await findUserById(decoded.id);
     if (!user || !user.is_active) return null;
+    // Sessions created before the last password change are no longer valid
+    if (user.password_changed_at && decoded.iat * 1000 < new Date(user.password_changed_at).getTime() - 1000) {
+        return null;
+    }
     return toAuthUser(user);
 };
 

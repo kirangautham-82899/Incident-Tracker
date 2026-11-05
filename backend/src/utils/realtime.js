@@ -48,7 +48,7 @@ export const setupSocket = (io) => {
         socket.data.user = null;
         if (token) {
             try {
-                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
                 const user = await findUserById(decoded.id);
                 if (user && user.is_active) {
                     socket.data.user = { _id: user.id, name: user.name, role: user.role };

@@ -35,8 +35,8 @@ const SignupPage = () => {
             return;
         }
 
-        if (passwordStrength < 2) {
-            toast.error('Please use a stronger password');
+        if (formData.password.length < 8 || !/[A-Za-z]/.test(formData.password) || !/[0-9]/.test(formData.password)) {
+            toast.error('Password must be at least 8 characters and include a letter and a number');
             return;
         }
 
@@ -185,7 +185,7 @@ const SignupPage = () => {
                                         <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${focusedField === 'password' ? 'text-blue-400' : 'text-gray-500'}`} />
                                         <input
                                             type={showPassword ? 'text' : 'password'}
-                                            placeholder="Create password"
+                                            placeholder="8+ characters, letters and numbers"
                                             value={formData.password}
                                             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                             onFocus={() => setFocusedField('password')}

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { UPLOAD_DIR } from './controllers/uploadController.js';
 import { isDatabaseHealthy } from './config/database.js';
@@ -11,38 +12,46 @@ import analyticsRoutes from './routes/analytics.js';
 import userRoutes from './routes/users.js';
 import uploadRoutes from './routes/uploads.js';
 
-// Origins allowed to call the API: local dev, FRONTEND_URL (comma separated
-// list allowed) and any *.vercel.app preview deployment.
+// Origins allowed to call the API cross-origin. In production the site and API
+// share one origin on Vercel, so this mainly covers local dev, FRONTEND_URL
+// (comma separated) and this project's own Vercel preview deployments.
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:4173',
     'http://127.0.0.1:5173',
+    'https://incident-tracker-alpha.vercel.app',
     ...(process.env.FRONTEND_URL || '').split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean)
 ];
+const PREVIEW_ORIGIN = /^https:\/\/incident-tracker-[a-z0-9-]+-kiran-gauthams-projects-7cd1bdee\.vercel\.app$/;
 
 export const corsOptions = {
     origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, server-to-server)
+        // Requests without an Origin (curl, server-to-server) carry no browser credentials
         if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin) || /\.vercel\.app$/.test(new URL(origin).hostname)) {
-            return callback(null, true);
-        }
-        return callback(new Error(`Origin ${origin} not allowed by CORS`));
+        // Unknown origins simply get no CORS headers, so the browser blocks them
+        callback(null, allowedOrigins.includes(origin) || PREVIEW_ORIGIN.test(origin));
     },
-    credentials: true,
+    // Auth uses Bearer tokens, not cookies
+    credentials: false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 600
 };
 
 export const createApp = ({ beforeRoutes } = {}) => {
     const app = express();
 
     app.set('trust proxy', 1);
+    app.disable('x-powered-by');
+    // Security headers. Responses are JSON, so the strictest CSP applies.
+    app.use(helmet({
+        contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+        crossOriginResourcePolicy: { policy: 'cross-origin' } // locally stored uploads are shown by the site
+    }));
     app.use(cors(corsOptions));
     if (beforeRoutes) app.use(beforeRoutes);
-    app.use(express.json({ limit: '1mb' }));
-    app.use(express.urlencoded({ extended: true }));
-    app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
+    app.use(express.json({ limit: '100kb' }));
+    app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', dotfiles: 'deny', index: false }));
 
     if (process.env.NODE_ENV === 'development') {
         app.use((req, res, next) => {

@@ -8,6 +8,7 @@ import { createServer } from 'http';
 import { startLocalPostgres } from '../scripts/local-postgres.js';
 
 process.env.JWT_SECRET = 'test-secret';
+process.env.RATE_LIMIT_DISABLED = 'true'; // enabled explicitly in the rate-limit test
 process.env.NODE_ENV = 'test';
 
 let db;
@@ -282,4 +283,58 @@ test('schema migration is idempotent', async () => {
     const { migrate } = await import('../src/config/database.js');
     await migrate();
     await migrate();
+});
+
+test('security headers are set and unknown origins get no CORS access', async () => {
+    const res = await fetch(`${base}/api/health`, { headers: { Origin: 'https://evil.example' } });
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.ok(res.headers.get('content-security-policy')?.includes("default-src 'none'"));
+    assert.equal(res.headers.get('x-powered-by'), null);
+    assert.equal(res.headers.get('access-control-allow-origin'), null);
+    const ok = await fetch(`${base}/api/health`, { headers: { Origin: 'http://localhost:5173' } });
+    assert.equal(ok.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+});
+
+test('weak passwords are rejected', async () => {
+    for (const password of ['short1', 'longbutnodigits', '12345678']) {
+        const res = await call('POST', '/api/auth/register', { body: { name: 'Weak', email: `weak${password}@test.com`, password } });
+        assert.equal(res.status, 400, password);
+    }
+});
+
+test('changing password signs out old sessions and returns a new token', async () => {
+    const reg = await call('POST', '/api/auth/register', { body: { name: 'Rotator', email: 'rotate@test.com', password: 'secret123' } });
+    const oldToken = reg.body.data.token;
+    await new Promise(r => setTimeout(r, 1100)); // tokens have 1s resolution
+    const change = await call('PUT', '/api/auth/me', { token: oldToken, body: { currentPassword: 'secret123', newPassword: 'newsecret456' } });
+    assert.equal(change.status, 200);
+    assert.ok(change.body.token);
+    assert.equal((await call('GET', '/api/auth/me', { token: oldToken })).status, 401);
+    assert.equal((await call('GET', '/api/auth/me', { token: change.body.token })).status, 200);
+});
+
+test('media from foreign hosts is dropped from reports', async () => {
+    const res = await call('POST', '/api/incidents', {
+        token: citizen.token,
+        body: incidentBody({ type: 'other', location: { coordinates: [20, 20] }, media: [
+            { type: 'image', url: 'https://evil.example/track.png' },
+            { type: 'image', url: `${base}/uploads/ok.png` }
+        ] })
+    });
+    assert.equal(res.status, 201);
+    assert.deepEqual(res.body.data.media.map(m => m.url), [`${base}/uploads/ok.png`]);
+});
+
+test('login is rate limited per IP', async () => {
+    process.env.RATE_LIMIT_DISABLED = 'false';
+    try {
+        const statuses = [];
+        for (let i = 0; i < 12; i++) {
+            statuses.push((await call('POST', '/api/auth/login', { body: { email: 'nobody@test.com', password: 'wrongpass1' } })).status);
+        }
+        assert.deepEqual(statuses.slice(0, 10), Array(10).fill(401));
+        assert.equal(statuses[10], 429);
+    } finally {
+        process.env.RATE_LIMIT_DISABLED = 'true';
+    }
 });

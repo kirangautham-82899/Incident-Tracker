@@ -548,7 +548,6 @@ const LandingPage = () => {
 
             {/* Stats Section */}
             <div className="py-20 border-y border-white/5 bg-slate-900/50 backdrop-blur-md relative overflow-hidden">
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
                 <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 lg:grid-cols-4 gap-12 relative z-10">
                     {[
                         { value: "12,405", label: "Active Guardians", color: "text-blue-400" },

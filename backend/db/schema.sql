@@ -90,6 +90,16 @@ create table if not exists comments (
 );
 create index if not exists comments_incident_idx on comments (incident_id, created_at desc);
 
+-- Tokens issued before this moment are rejected (set on password change)
+alter table users add column if not exists password_changed_at timestamptz;
+
+-- Fixed-window request counters (see src/middleware/rateLimit.js)
+create table if not exists rate_limits (
+    key          text primary key,
+    window_start timestamptz not null,
+    hits         integer not null
+);
+
 -- Great-circle distance in metres (no PostGIS needed)
 create or replace function distance_m(lat1 double precision, lng1 double precision,
                                       lat2 double precision, lng2 double precision)
@@ -109,3 +119,4 @@ alter table incident_verifications enable row level security;
 alter table incident_notes enable row level security;
 alter table incident_status_history enable row level security;
 alter table comments enable row level security;
+alter table rate_limits enable row level security;

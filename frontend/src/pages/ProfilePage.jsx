@@ -59,8 +59,8 @@ const ProfilePage = () => {
 
     const handleSave = async (e) => {
         e.preventDefault();
-        if (form.newPassword && form.newPassword.length < 6) {
-            toast.error('New password must be at least 6 characters');
+        if (form.newPassword && (form.newPassword.length < 8 || !/[A-Za-z]/.test(form.newPassword) || !/[0-9]/.test(form.newPassword))) {
+            toast.error('New password must be at least 8 characters and include a letter and a number');
             return;
         }
         setSaving(true);
