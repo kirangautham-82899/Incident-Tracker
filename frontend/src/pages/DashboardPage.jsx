@@ -28,7 +28,7 @@ const DashboardPage = () => {
         const load = () => api.get('/analytics/stats').then(res => setStats(res.data.data)).catch(() => {});
         const schedule = () => { clearTimeout(timer); timer = setTimeout(load, 1000); };
         load();
-        const offs = ['incident_created', 'incident_updated', 'incident_verified', 'incident_deleted'].map(e => socketService.on(e, schedule));
+        const offs = ['incident_created', 'incident_updated', 'incident_verified', 'incident_deleted', 'data_refresh'].map(e => socketService.on(e, schedule));
         return () => { clearTimeout(timer); offs.forEach(off => off()); };
     }, []);
 

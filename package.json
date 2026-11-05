@@ -9,6 +9,7 @@
     ],
     "scripts": {
         "start": "npm start -w incident-tracker-backend",
-        "build": "echo 'No build step for backend' && exit 0"
-    }
+        "test": "npm test -w incident-tracker-backend"
+    },
+    "type": "module"
 }

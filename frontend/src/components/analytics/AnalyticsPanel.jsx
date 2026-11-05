@@ -87,7 +87,7 @@ const AnalyticsPanel = () => {
             clearTimeout(timer);
             timer = setTimeout(load, 1500);
         };
-        const offs = ['incident_created', 'incident_updated', 'incident_verified', 'incident_deleted']
+        const offs = ['incident_created', 'incident_updated', 'incident_verified', 'incident_deleted', 'data_refresh']
             .map(evt => socketService.on(evt, schedule));
         return () => {
             clearTimeout(timer);

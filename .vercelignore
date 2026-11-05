@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+.env
+backend/.env
+**/.env.local
+**/.env.*.local
+backend/uploads
+frontend/dist
+.claude

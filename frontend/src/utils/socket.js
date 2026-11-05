@@ -65,6 +65,11 @@ class SocketService {
         this.socket?.off(event, callback);
     }
 
+    // Fire registered listeners locally (used by the polling fallback)
+    dispatchLocal(event, data) {
+        this.listeners.get(event)?.forEach(cb => cb(data));
+    }
+
     emit(event, data) {
         this.socket?.emit(event, data);
     }

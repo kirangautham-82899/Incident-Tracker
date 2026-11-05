@@ -30,7 +30,7 @@ const AdminDashboardPage = () => {
         loadStats();
         let timer;
         const schedule = () => { clearTimeout(timer); timer = setTimeout(loadStats, 1000); };
-        const offs = ['incident_created', 'incident_updated', 'incident_verified', 'incident_deleted'].map(e => socketService.on(e, schedule));
+        const offs = ['incident_created', 'incident_updated', 'incident_verified', 'incident_deleted', 'data_refresh'].map(e => socketService.on(e, schedule));
         return () => { clearTimeout(timer); offs.forEach(off => off()); };
     }, [loadStats]);
 

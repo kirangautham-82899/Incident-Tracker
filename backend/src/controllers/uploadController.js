@@ -84,6 +84,46 @@ const saveLocally = async (file, req) => {
     return `${base}/uploads/${name}`;
 };
 
+// @desc    Get one-time signed URLs so the browser uploads straight to Supabase Storage
+//          (avoids serverless request-size limits). Falls back to `mode: multipart`
+//          when Supabase Storage isn't configured.
+// @route   POST /api/uploads/sign   body: { files: [{ name, type, size }] }
+// @access  Public (anonymous reporters can attach evidence too)
+export const signUploads = asyncHandler(async (req, res) => {
+    if (!supabaseConfigured()) {
+        return res.status(200).json({ success: true, mode: 'multipart' });
+    }
+
+    const files = Array.isArray(req.body.files) ? req.body.files : [];
+    if (files.length === 0) throw new ApiError(400, 'No files to upload');
+    if (files.length > MAX_FILES) throw new ApiError(400, `Maximum ${MAX_FILES} files`);
+    for (const f of files) {
+        const type = String(f?.type || '');
+        if (!type.startsWith('image/') && !type.startsWith('video/')) {
+            throw new ApiError(400, 'Only image and video files are allowed');
+        }
+        if (!(Number(f.size) > 0) || Number(f.size) > MAX_FILE_SIZE) {
+            throw new ApiError(400, 'File too large (max 10MB)');
+        }
+    }
+
+    await ensureBucket();
+    const storage = getSupabase().storage.from(BUCKET());
+    const data = [];
+    for (const f of files) {
+        const objectPath = `incidents/${new Date().toISOString().slice(0, 10)}/${fileName({ originalname: String(f.name || 'file') })}`;
+        const { data: signed, error } = await storage.createSignedUploadUrl(objectPath);
+        if (error) throw new ApiError(502, `Could not prepare upload: ${error.message}`);
+        data.push({
+            type: String(f.type).startsWith('video/') ? 'video' : 'image',
+            signedUrl: signed.signedUrl,
+            url: storage.getPublicUrl(objectPath).data.publicUrl
+        });
+    }
+
+    res.status(200).json({ success: true, mode: 'direct', data });
+});
+
 // @desc    Upload incident media (images/videos)
 // @route   POST /api/uploads
 // @access  Public (anonymous reporters can attach evidence too)

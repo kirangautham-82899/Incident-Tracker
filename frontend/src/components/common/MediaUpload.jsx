@@ -44,10 +44,25 @@ const MediaUpload = ({ value = [], onChange, maxFiles = 5, onUploadingChange }) 
         onUploadingChange?.(next.some(i => i.status === 'uploading'));
     };
 
+    // Preferred: get a one-time signed URL and send the file straight to Supabase Storage.
+    // Falls back to uploading through the API when the server has no Supabase Storage.
     const uploadOne = async (item) => {
-        const form = new FormData();
-        form.append('files', item.file);
         try {
+            const sign = await api.post('/uploads/sign', {
+                files: [{ name: item.name, type: item.type, size: item.size }]
+            });
+            if (sign.data.mode === 'direct') {
+                const target = sign.data.data[0];
+                const body = new FormData();
+                body.append('cacheControl', '3600');
+                body.append('', item.file);
+                const res = await fetch(target.signedUrl, { method: 'PUT', body, headers: { 'x-upsert': 'false' } });
+                if (!res.ok) throw new Error(`storage responded ${res.status}`);
+                return { ...item, status: 'done', media: { type: target.type, url: target.url } };
+            }
+
+            const form = new FormData();
+            form.append('files', item.file);
             const res = await api.post('/uploads', form, { headers: { 'Content-Type': 'multipart/form-data' } });
             return { ...item, status: 'done', media: res.data.data[0] };
         } catch (error) {

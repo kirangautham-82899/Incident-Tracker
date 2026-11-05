@@ -90,6 +90,7 @@ const useRealtime = () => {
     const poll = setInterval(() => {
       if (!socketService.connected && document.visibilityState === 'visible') {
         useIncidentStore.getState().refresh();
+        socketService.dispatchLocal('data_refresh'); // stats/analytics panels reload too
       }
     }, 20000);
 
