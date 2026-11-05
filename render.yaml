@@ -1,0 +1,27 @@
+# Render Blueprint: deploys the API (with Socket.IO) as a web service.
+# Render dashboard -> New -> Blueprint -> pick this repo.
+# You will be asked for MONGODB_URI (and optional Cloudinary keys).
+services:
+  - type: web
+    name: incident-tracker-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

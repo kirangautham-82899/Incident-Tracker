@@ -85,6 +85,9 @@ The frontend reads `frontend/.env.development` in dev (points at `localhost:5000
 
 - **Frontend:** deploy `frontend/` to Vercel (framework: Vite). `vercel.json` handles SPA routing.
 - **API, full real-time (recommended):** deploy `backend/` (`npm start`) to a persistent host such as Railway, Render or Fly.io.
+- **API on Render (one click):** Render dashboard → New → Blueprint → select this repo. `render.yaml` creates the service from `backend/` and generates `JWT_SECRET`. Enter `MONGODB_URI` (a free MongoDB Atlas cluster works; allow access from `0.0.0.0/0`) and, optionally, the Cloudinary keys. The free plan sleeps when idle, so the first request after a while takes about 30 s.
+- **API on Railway:** New Project → Deploy from GitHub repo, set Root Directory to `backend`, add `MONGODB_URI`, `JWT_SECRET` and `NODE_ENV=production`, then Settings → Networking → Generate Domain.
+- **After the API is live:** set `VITE_API_URL=https://<api-host>/api` and `VITE_SOCKET_URL=https://<api-host>` on the Vercel frontend project and redeploy, then run `npm run create-admin` against the production database.
 - **API on Vercel:** deploy `backend/` as its own Vercel project. `api/index.js` serves the REST API as a serverless function. Socket.IO and chat are not available there, so build the frontend with `VITE_ENABLE_SOCKET=false` (it polls instead). Set the `CLOUDINARY_*` variables for media uploads.
 
 ## API overview
