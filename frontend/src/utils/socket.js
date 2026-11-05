@@ -1,38 +1,45 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000').replace(/\/$/, '');
+export const SOCKET_ENABLED = import.meta.env.VITE_ENABLE_SOCKET !== 'false';
 
+/**
+ * Single shared Socket.IO connection.
+ * Listeners registered with on() survive reconnects (e.g. after login/logout),
+ * because they are re-attached to every new socket instance.
+ */
 class SocketService {
     constructor() {
         this.socket = null;
-        this.isConnected = false;
+        this.listeners = new Map(); // event -> Set(callback)
+        this.token = undefined;
     }
 
-    connect() {
-        if (this.socket?.connected) {
-            console.log('Socket already connected');
+    connect(token = localStorage.getItem('token')) {
+        // Serverless API hosts (e.g. Vercel) cannot keep WebSocket connections
+        if (!SOCKET_ENABLED) return null;
+        if (this.socket && this.token === token) {
             return this.socket;
         }
+        if (this.socket) {
+            this.socket.disconnect();
+        }
 
+        this.token = token;
         this.socket = io(SOCKET_URL, {
             transports: ['websocket', 'polling'],
+            auth: token ? { token } : {},
             reconnection: true,
-            reconnectionAttempts: 5,
             reconnectionDelay: 1000,
+            reconnectionDelayMax: 30000
         });
 
-        this.socket.on('connect', () => {
-            console.log('✅ Socket connected:', this.socket.id);
-            this.isConnected = true;
-        });
-
-        this.socket.on('disconnect', () => {
-            console.log('❌ Socket disconnected');
-            this.isConnected = false;
-        });
+        for (const [event, callbacks] of this.listeners) {
+            callbacks.forEach(cb => this.socket.on(event, cb));
+        }
 
         this.socket.on('connect_error', (error) => {
-            console.error('Socket connection error:', error);
+            console.warn('Socket connection error:', error.message);
         });
 
         return this.socket;
@@ -42,34 +49,31 @@ class SocketService {
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
-            this.isConnected = false;
+            this.token = undefined;
         }
     }
 
     on(event, callback) {
-        if (this.socket) {
-            this.socket.on(event, callback);
-        }
+        if (!this.listeners.has(event)) this.listeners.set(event, new Set());
+        this.listeners.get(event).add(callback);
+        this.socket?.on(event, callback);
+        return () => this.off(event, callback);
     }
 
     off(event, callback) {
-        if (this.socket) {
-            this.socket.off(event, callback);
-        }
+        this.listeners.get(event)?.delete(callback);
+        this.socket?.off(event, callback);
     }
 
     emit(event, data) {
-        if (this.socket) {
-            this.socket.emit(event, data);
-        }
+        this.socket?.emit(event, data);
     }
 
-    getSocket() {
-        return this.socket;
+    get connected() {
+        return Boolean(this.socket?.connected);
     }
 }
 
-// Singleton instance
 const socketService = new SocketService();
 
 export default socketService;

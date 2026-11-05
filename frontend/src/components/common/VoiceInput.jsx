@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const VoiceInput = ({ onTranscript, placeholder = "Tap to speak..." }) => {
+const VoiceInput = ({ onTranscript }) => {
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
     const recognitionRef = useRef(null);

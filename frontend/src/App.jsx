@@ -1,76 +1,110 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import { Toaster } from 'react-hot-toast';
-import toast from 'react-hot-toast';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect, lazy, Suspense } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
-import ReportPage from './pages/ReportPage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import ProfilePage from './pages/ProfilePage';
-import MapPage from './pages/MapPage';
-import AdminDashboardPage from './pages/admin/AdminDashboardPage';
-import LandingPage from './pages/LandingPage';
-import PrivacyPage from './pages/PrivacyPage';
-import TermsPage from './pages/TermsPage';
-import ContactPage from './pages/ContactPage';
+import Loading from './components/common/Loading';
+
+// Heavier pages (maps, charts) are loaded on demand
+const ReportPage = lazy(() => import('./pages/ReportPage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const MapPage = lazy(() => import('./pages/MapPage'));
+const IncidentDetailPage = lazy(() => import('./pages/IncidentDetailPage'));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const TermsPage = lazy(() => import('./pages/TermsPage'));
+const ContactPage = lazy(() => import('./pages/ContactPage'));
 import useAuthStore from './stores/authStore';
 import useIncidentStore from './stores/incidentStore';
 import socketService from './utils/socket';
 import notificationService from './utils/notificationService';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { isStaff, STATUS_LABELS } from './utils/constants';
+import { sameId } from './utils/helpers';
 
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useAuthStore();
-  return isAuthenticated ? children : <Navigate to="/login" />;
+// Requires a logged-in user; optionally restricted to roles
+const ProtectedRoute = ({ children, roles }) => {
+  const { isAuthenticated, user } = useAuthStore();
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+  if (roles && !roles.includes(user?.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
 };
 
-function App() {
-  const { addIncident, updateIncident } = useIncidentStore();
+// Keeps the incident store and notifications in sync with the server
+const useRealtime = () => {
+  const token = useAuthStore((s) => s.token);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
 
   useEffect(() => {
-    // Request notification permission on app load
-    if (notificationService.isNotificationSupported()) {
-      notificationService.requestPermission();
-    }
+    socketService.connect(token);
+  }, [token]);
 
-    // Connect to Socket.IO server
-    socketService.connect();
+  useEffect(() => {
+    refreshUser();
+  }, [refreshUser]);
 
-    // Listen for new incidents
-    socketService.on('incident_created', (incident) => {
-      console.log('📡 New incident received:', incident);
+  useEffect(() => {
+    const { addIncident, updateIncident, removeIncident } = useIncidentStore.getState();
+    const me = () => useAuthStore.getState().user;
+
+    const offCreated = socketService.on('incident_created', (incident) => {
       addIncident(incident);
-      toast.success('New incident reported!');
+      if (sameId(incident.reporter?.userId, me())) return; // own report: the form already confirmed it
+      const urgent = ['critical', 'high'].includes(incident.severity);
+      toast(`New ${incident.severity} ${incident.type} incident: ${incident.title}`, {
+        icon: urgent ? '🚨' : '📍'
+      });
+      if (urgent || isStaff(me())) notificationService.notifyNewIncident(incident);
+    });
 
-      // Show push notification for nearby/critical incidents
-      if (incident.severity === 'critical' || incident.severity === 'high') {
-        notificationService.notifyNewIncident(incident);
+    const offUpdated = socketService.on('incident_updated', (incident) => {
+      const previous = useIncidentStore.getState().incidents.find(i => i._id === incident._id);
+      updateIncident(incident);
+      // Tell the reporter when their incident's status changes
+      if (previous && previous.status !== incident.status && sameId(incident.reporter?.userId, me())) {
+        toast(`Your report "${incident.title}" is now ${STATUS_LABELS[incident.status]}`, { icon: '🔄' });
+        notificationService.notifyStatusUpdate(incident, incident.status);
       }
     });
 
-    // Listen for incident updates
-    socketService.on('incident_updated', (incident) => {
-      console.log('📡 Incident updated:', incident);
+    const offVerified = socketService.on('incident_verified', (incident) => {
       updateIncident(incident);
-      toast('Incident updated', { icon: '🔄' });
-      notificationService.notifyStatusUpdate(incident, incident.status);
+      if (sameId(incident.reporter?.userId, me())) {
+        notificationService.notifyVerification(incident);
+      }
     });
 
-    // Listen for verification updates
-    socketService.on('incident_verified', (incident) => {
-      console.log('📡 Incident verified:', incident);
-      updateIncident(incident);
-      toast.success('Incident verified!');
-      notificationService.notifyVerification(incident);
-    });
+    const offDeleted = socketService.on('incident_deleted', ({ _id }) => removeIncident(_id));
 
-    // Cleanup on unmount
+    // Fallback when the live connection is unavailable (e.g. serverless API host):
+    // poll the current list so the feed, map and console still update.
+    const poll = setInterval(() => {
+      if (!socketService.connected && document.visibilityState === 'visible') {
+        useIncidentStore.getState().refresh();
+      }
+    }, 20000);
+
     return () => {
-      socketService.disconnect();
+      offCreated();
+      offUpdated();
+      offVerified();
+      offDeleted();
+      clearInterval(poll);
     };
-  }, [addIncident, updateIncident]);
+  }, []);
+};
+
+function App() {
+  useRealtime();
 
   return (
     <ThemeProvider>
@@ -78,61 +112,48 @@ function App() {
         <Toaster
           position="top-right"
           toastOptions={{
-            duration: 3000,
+            duration: 4000,
             style: {
-              background: '#fff',
-              color: '#363636',
+              background: '#1e293b',
+              color: '#f1f5f9',
+              border: '1px solid rgba(255,255,255,0.1)'
             },
-            success: {
-              iconTheme: {
-                primary: '#10b981',
-                secondary: '#fff',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: '#ef4444',
-                secondary: '#fff',
-              },
-            },
+            success: { iconTheme: { primary: '#10b981', secondary: '#fff' } },
+            error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } }
           }}
         />
 
+        <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loading text="Loading..." /></div>}>
         <Routes>
-          {/* Public Routes */}
+          {/* Public */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/report" element={<ReportPage />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/incident/:id" element={<IncidentDetailPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/contact" element={<ContactPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
+
+          {/* Logged-in users */}
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/map" element={<MapPage />} />
 
-          {/* Protected Routes */}
-          <Route
-            path="/report"
-            element={
-              <ProtectedRoute>
-                <ReportPage />
-              </ProtectedRoute>
-            }
-          />
-
+          {/* Responders and admins */}
           <Route
             path="/admin"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute roles={['admin', 'responder']}>
                 <AdminDashboardPage />
               </ProtectedRoute>
             }
           />
 
-          {/* Catch all - redirect to dashboard */}
-          <Route path="*" element={<Navigate to="/dashboard" />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </ThemeProvider>
   );

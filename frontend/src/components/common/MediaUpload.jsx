@@ -1,287 +1,159 @@
-import React, { useState, useCallback } from 'react';
-import { Upload, X, Image as ImageIcon, Loader, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Upload, X, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api, { getErrorMessage } from '../../utils/api';
 
-const MediaUpload = ({ onUploadComplete, maxFiles = 5 }) => {
-    const [files, setFiles] = useState([]);
-    const [previews, setPreviews] = useState([]);
-    const [uploading, setUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState({});
+const MAX_SIZE = 10 * 1024 * 1024;
+
+const formatFileSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+/**
+ * Picks images/videos and uploads them immediately to /api/uploads.
+ * Calls onChange(mediaArray) with [{ type, url }] for every uploaded file.
+ */
+const MediaUpload = ({ value = [], onChange, maxFiles = 5, onUploadingChange }) => {
+    const [items, setItems] = useState([]); // { id, name, size, type, preview, status, media }
     const [dragActive, setDragActive] = useState(false);
+    const inputRef = useRef(null);
+    // Latest items, readable from async upload callbacks
+    const itemsRef = useRef([]);
+    const [prevValue, setPrevValue] = useState(value);
 
-    const handleDrag = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.type === "dragenter" || e.type === "dragover") {
-            setDragActive(true);
-        } else if (e.type === "dragleave") {
-            setDragActive(false);
+    // Parent cleared the form after submit: reset (state adjusted during render)
+    if (value !== prevValue) {
+        setPrevValue(value);
+        if (value.length === 0 && items.some(i => i.status === 'done')) {
+            setItems([]);
         }
-    }, []);
+    }
 
-    const handleDrop = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDragActive(false);
+    useEffect(() => {
+        itemsRef.current = items;
+    }, [items]);
 
-        const droppedFiles = Array.from(e.dataTransfer.files);
-        handleFiles(droppedFiles);
-    }, []);
+    useEffect(() => () => itemsRef.current.forEach(i => URL.revokeObjectURL(i.preview)), []);
 
-    const handleFiles = (newFiles) => {
-        const imageFiles = newFiles.filter(file => file.type.startsWith('image/') || file.type.startsWith('video/'));
-
-        if (files.length + imageFiles.length > maxFiles) {
-            toast.error(`Maximum ${maxFiles} files allowed`);
-            return;
-        }
-
-        setFiles(prev => [...prev, ...imageFiles]);
-
-        // Create previews
-        imageFiles.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                setPreviews(prev => [...prev, {
-                    id: file.name + file.size,
-                    url: e.target.result,
-                    type: file.type,
-                    name: file.name,
-                    size: file.size
-                }]);
-            };
-            reader.readAsDataURL(file);
-        });
+    const publish = (next) => {
+        itemsRef.current = next;
+        setItems(next);
+        onChange?.(next.filter(i => i.status === 'done').map(i => i.media));
+        onUploadingChange?.(next.some(i => i.status === 'uploading'));
     };
 
-    const handleFileInput = (e) => {
-        const selectedFiles = Array.from(e.target.files);
-        handleFiles(selectedFiles);
-    };
-
-    const removeFile = (index) => {
-        setFiles(prev => prev.filter((_, i) => i !== index));
-        setPreviews(prev => prev.filter((_, i) => i !== index));
-    };
-
-    const uploadToCloudinary = async (file) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', 'incident_tracker'); // You'll need to set this in Cloudinary
-        formData.append('cloud_name', 'your_cloud_name'); // Replace with your Cloudinary cloud name
-
+    const uploadOne = async (item) => {
+        const form = new FormData();
+        form.append('files', item.file);
         try {
-            const response = await fetch(
-                `https://api.cloudinary.com/v1_1/your_cloud_name/upload`, // Replace with your cloud name
-                {
-                    method: 'POST',
-                    body: formData
-                }
-            );
-
-            if (!response.ok) throw new Error('Upload failed');
-
-            const data = await response.json();
-            return {
-                url: data.secure_url,
-                type: file.type.startsWith('image/') ? 'image' : 'video'
-            };
+            const res = await api.post('/uploads', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+            return { ...item, status: 'done', media: res.data.data[0] };
         } catch (error) {
-            console.error('Upload error:', error);
-            throw error;
+            toast.error(`${item.name}: ${getErrorMessage(error, 'upload failed')}`);
+            return { ...item, status: 'error' };
         }
     };
 
-    const uploadFiles = async () => {
+    const handleFiles = async (fileList) => {
+        const files = Array.from(fileList).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
         if (files.length === 0) {
-            toast.error('No files selected');
+            toast.error('Only images and videos can be attached');
+            return;
+        }
+        const tooBig = files.filter(f => f.size > MAX_SIZE);
+        if (tooBig.length) toast.error(`${tooBig.map(f => f.name).join(', ')} is larger than 10MB`);
+        const accepted = files.filter(f => f.size <= MAX_SIZE).slice(0, maxFiles - itemsRef.current.length);
+        if (accepted.length === 0) {
+            if (!tooBig.length) toast.error(`Maximum ${maxFiles} files`);
             return;
         }
 
-        setUploading(true);
-        const uploadedMedia = [];
+        const newItems = accepted.map(file => ({
+            id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`,
+            file,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            preview: URL.createObjectURL(file),
+            status: 'uploading'
+        }));
+        publish([...itemsRef.current, ...newItems]);
 
-        try {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
-
-                // Simulate upload progress (replace with real progress tracking)
-                const progressInterval = setInterval(() => {
-                    setUploadProgress(prev => ({
-                        ...prev,
-                        [file.name]: Math.min((prev[file.name] || 0) + 10, 90)
-                    }));
-                }, 200);
-
-                // For demo: just use local preview URLs instead of Cloudinary
-                // In production, uncomment the uploadToCloudinary call
-                // const media = await uploadToCloudinary(file);
-                const media = {
-                    url: previews[i].url,
-                    type: file.type.startsWith('image/') ? 'image' : 'video'
-                };
-
-                clearInterval(progressInterval);
-                setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
-                uploadedMedia.push(media);
-            }
-
-            toast.success(`${uploadedMedia.length} file(s) uploaded successfully!`);
-
-            if (onUploadComplete) {
-                onUploadComplete(uploadedMedia);
-            }
-
-            // Clear files after successful upload
-            setFiles([]);
-            setPreviews([]);
-            setUploadProgress({});
-        } catch (error) {
-            toast.error('Upload failed. Please try again.');
-            console.error(error);
-        } finally {
-            setUploading(false);
-        }
+        const results = await Promise.all(newItems.map(uploadOne));
+        const byId = Object.fromEntries(results.map(r => [r.id, r]));
+        publish(itemsRef.current.map(i => byId[i.id] || i).filter(i => i.status !== 'error'));
     };
 
-    const formatFileSize = (bytes) => {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    const removeItem = (id) => {
+        const item = itemsRef.current.find(i => i.id === id);
+        if (item) URL.revokeObjectURL(item.preview);
+        publish(itemsRef.current.filter(i => i.id !== id));
+    };
+
+    const onDrag = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragActive(e.type === 'dragenter' || e.type === 'dragover');
     };
 
     return (
-        <div className="space-y-4">
-            {/* Drop Zone */}
+        <div className="space-y-3">
             <div
-                className={`relative border-2 border-dashed rounded-2xl p-8 transition-all duration-300 ${dragActive
-                        ? 'border-blue-500 bg-blue-500/10 scale-105'
-                        : 'border-white/20 bg-slate-900/50 hover:border-white/40'
-                    }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${dragActive ? 'border-blue-500 bg-blue-500/10' : 'border-white/20 bg-slate-900/50 hover:border-white/40'}`}
+                onDragEnter={onDrag}
+                onDragLeave={onDrag}
+                onDragOver={onDrag}
+                onDrop={(e) => { onDrag(e); setDragActive(false); handleFiles(e.dataTransfer.files); }}
+                onClick={() => inputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && inputRef.current?.click()}
             >
                 <input
+                    ref={inputRef}
                     type="file"
-                    id="file-upload"
                     className="hidden"
                     multiple
                     accept="image/*,video/*"
-                    onChange={handleFileInput}
-                    disabled={uploading}
+                    onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
                 />
-
-                <label
-                    htmlFor="file-upload"
-                    className="flex flex-col items-center justify-center cursor-pointer"
-                >
-                    <div className={`mb-4 p-4 rounded-full ${dragActive ? 'bg-blue-500/20' : 'bg-slate-800/50'} transition-all`}>
-                        <Upload className={`w-12 h-12 ${dragActive ? 'text-blue-400' : 'text-gray-400'}`} />
-                    </div>
-                    <p className="text-lg font-bold text-white mb-2">
-                        {dragActive ? 'Drop files here' : 'Upload Media'}
-                    </p>
-                    <p className="text-sm text-gray-400 text-center">
-                        Drag and drop or click to select<br />
-                        <span className="text-xs">Images or videos (max {maxFiles} files)</span>
-                    </p>
-                </label>
-
-                {dragActive && (
-                    <div className="absolute inset-0 bg-blue-500/5 rounded-2xl pointer-events-none animate-pulse"></div>
-                )}
+                <Upload className={`w-8 h-8 mx-auto mb-2 ${dragActive ? 'text-blue-400' : 'text-gray-400'}`} />
+                <p className="text-sm font-bold text-white">Add photos or videos</p>
+                <p className="text-xs text-gray-400">Drag and drop or click · up to {maxFiles} files, 10MB each</p>
             </div>
 
-            {/* Preview Grid */}
-            {previews.length > 0 && (
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
-                            Selected Files ({previews.length})
-                        </h3>
-                        {!uploading && (
-                            <button
-                                onClick={uploadFiles}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition-all flex items-center gap-2"
-                            >
-                                <Upload className="w-4 h-4" />
-                                Upload {previews.length} file{previews.length > 1 ? 's' : ''}
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {previews.map((preview, index) => (
-                            <div key={preview.id} className="relative group">
-                                <div className="aspect-square rounded-xl overflow-hidden bg-slate-800 border border-white/10">
-                                    {preview.type.startsWith('image/') ? (
-                                        <img
-                                            src={preview.url}
-                                            alt={preview.name}
-                                            className="w-full h-full object-cover"
-                                        />
-                                    ) : (
-                                        <video
-                                            src={preview.url}
-                                            className="w-full h-full object-cover"
-                                        />
-                                    )}
-
-                                    {/* Upload Progress Overlay */}
-                                    {uploading && uploadProgress[preview.name] !== undefined && (
-                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                                            {uploadProgress[preview.name] === 100 ? (
-                                                <CheckCircle className="w-8 h-8 text-green-400" />
-                                            ) : (
-                                                <div className="text-center">
-                                                    <Loader className="w-8 h-8 text-blue-400 animate-spin mx-auto mb-2" />
-                                                    <span className="text-white text-sm font-bold">
-                                                        {uploadProgress[preview.name]}%
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* File Info */}
-                                <div className="mt-2">
-                                    <p className="text-xs text-gray-400 truncate">{preview.name}</p>
-                                    <p className="text-xs text-gray-500">{formatFileSize(preview.size)}</p>
-                                </div>
-
-                                {/* Remove Button */}
-                                {!uploading && (
-                                    <button
-                                        onClick={() => removeFile(index)}
-                                        className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg"
-                                    >
-                                        <X className="w-4 h-4 text-white" />
-                                    </button>
+            {items.length > 0 && (
+                <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                    {items.map((item) => (
+                        <div key={item.id} className="relative">
+                            <div className="aspect-square rounded-xl overflow-hidden bg-slate-800 border border-white/10 relative">
+                                {item.type.startsWith('image/') ? (
+                                    <img src={item.preview} alt={item.name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <video src={item.preview} className="w-full h-full object-cover" muted />
                                 )}
-
-                                {/* Type Badge */}
-                                <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg">
-                                    <span className="text-xs font-bold text-white uppercase">
-                                        {preview.type.startsWith('image/') ? '📷' : '🎥'}
-                                    </span>
-                                </div>
+                                {item.status === 'uploading' && (
+                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                        <Loader className="w-6 h-6 text-blue-400 animate-spin" />
+                                    </div>
+                                )}
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Upload State */}
-            {uploading && (
-                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
-                    <div className="flex items-center gap-3">
-                        <Loader className="w-5 h-5 text-blue-400 animate-spin" />
-                        <span className="text-sm text-blue-300 font-medium">Uploading files...</span>
-                    </div>
+                            <p className="text-[11px] text-gray-400 truncate mt-1">{item.name}</p>
+                            <p className="text-[11px] text-gray-500">{formatFileSize(item.size)}</p>
+                            {item.status !== 'uploading' && (
+                                <button
+                                    type="button"
+                                    onClick={() => removeItem(item.id)}
+                                    aria-label={`Remove ${item.name}`}
+                                    className="absolute top-1 right-1 p-1 bg-red-500 hover:bg-red-600 rounded-full shadow-lg"
+                                >
+                                    <X className="w-3 h-3 text-white" />
+                                </button>
+                            )}
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

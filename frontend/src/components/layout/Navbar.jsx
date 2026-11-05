@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Siren, Menu, X, LogIn, LogOut, User, Plus, Home, Shield, FileText, ChevronRight } from 'lucide-react';
+import { Siren, Menu, X, LogOut, Plus, Shield, ChevronRight, Activity, Map as MapIcon, BarChart3, Radio } from 'lucide-react';
 import useAuthStore from '../../stores/authStore';
+import { isStaff } from '../../utils/constants';
 
 import Button from '../common/Button';
 import SOSButton from '../common/SOSButton';
@@ -24,7 +25,13 @@ const Navbar = ({ transparent = false }) => {
 
     const handleLogout = () => {
         logout();
+        setIsMenuOpen(false);
         navigate('/');
+    };
+
+    const go = (to) => {
+        setIsMenuOpen(false);
+        navigate(to);
     };
 
     // Determine navbar styling based on state
@@ -38,7 +45,8 @@ const Navbar = ({ transparent = false }) => {
     const textClass = isTransparent ? 'text-white' : 'text-gray-100';
     const subTextClass = isTransparent ? 'text-blue-200' : 'text-gray-400';
 
-    const NavLink = ({ to, children, icon: Icon }) => {
+    // Plain render helper (not a component) so it isn't re-created as a new component type each render
+    const navLink = (to, children, Icon) => {
         const isActive = location.pathname === to;
         return (
             <Link
@@ -78,25 +86,26 @@ const Navbar = ({ transparent = false }) => {
                     </Link>
 
                     {/* Desktop Navigation */}
-                    <div className="hidden md:flex items-center gap-3">
+                    <div className="hidden lg:flex items-center gap-2">
 
 
                         {isAuthenticated && <SOSButton />}
 
-                        <NavLink to="/" icon={Home}>Home</NavLink>
-                        {isAuthenticated && <NavLink to="/dashboard" icon={Shield}>Dashboard</NavLink>}
-                        <NavLink to="/privacy" icon={FileText}>Privacy</NavLink>
+                        {navLink('/dashboard', 'Live Feed', Activity)}
+                        {navLink('/map', 'Map', MapIcon)}
+                        {navLink('/analytics', 'Analytics', BarChart3)}
+                        {isStaff(user) && navLink('/admin', 'Command', Radio)}
 
                         <div className="h-6 w-px bg-white/10 mx-2"></div>
 
                         {isAuthenticated ? (
                             <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-3 px-3 py-1.5 bg-white/5 rounded-full border border-white/10">
+                                <Link to="/profile" title="My profile" className="flex items-center gap-3 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10">
                                     <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
                                         {user?.name?.charAt(0)}
                                     </div>
                                     <span className={`text-sm font-medium ${textClass}`}>{user?.name}</span>
-                                </div>
+                                </Link>
 
                                 <Button
                                     variant="primary"
@@ -139,7 +148,7 @@ const Navbar = ({ transparent = false }) => {
                     {/* Mobile Menu Button */}
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        className={`md:hidden p-2 rounded-xl transition-all ${isMenuOpen ? 'bg-white/10 text-white' : `${textClass} hover:bg-white/10`
+                        className={`lg:hidden p-2 rounded-xl transition-all ${isMenuOpen ? 'bg-white/10 text-white' : `${textClass} hover:bg-white/10`
                             } `}
                     >
                         {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -148,9 +157,16 @@ const Navbar = ({ transparent = false }) => {
             </div>
 
             {/* Mobile Navigation Dropdown */}
-            <div className={`md:hidden absolute w-full bg-slate-900/95 backdrop-blur-xl border-t border-white/10 transition-all duration-300 ease-in-out origin-top ${isMenuOpen ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0 h-0'
+            <div className={`lg:hidden absolute w-full bg-slate-900/95 backdrop-blur-xl border-t border-white/10 transition-all duration-300 ease-in-out origin-top ${isMenuOpen ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0 h-0'
                 } `}>
                 <div className="px-4 py-6 space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                        {[['/dashboard', 'Live Feed'], ['/map', 'Map'], ['/analytics', 'Analytics'], ['/report', 'Report Incident'], ...(isStaff(user) ? [['/admin', 'Command']] : [])].map(([to, label]) => (
+                            <button key={to} onClick={() => go(to)} className={`p-3 rounded-xl text-sm font-medium border border-white/10 ${location.pathname === to ? 'bg-blue-500/20 text-blue-300' : 'text-gray-200 hover:bg-white/5'}`}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                     {isAuthenticated ? (
                         <>
                             <div className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-xl border border-white/10">
@@ -164,14 +180,13 @@ const Navbar = ({ transparent = false }) => {
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
-                                <Button fullWidth variant="primary" onClick={() => { navigate('/report'); setIsMenuOpen(false); }}>
+                                <Button fullWidth variant="primary" onClick={() => go('/report')}>
                                     <Plus className="w-4 h-4" /> Report
                                 </Button>
-                                <Button fullWidth variant="secondary" onClick={() => { navigate('/dashboard'); setIsMenuOpen(false); }}>
-                                    <Shield className="w-4 h-4" /> Dashboard
+                                <Button fullWidth variant="secondary" onClick={() => go('/profile')}>
+                                    Profile
                                 </Button>
                             </div>
-
                             <button
                                 onClick={handleLogout}
                                 className="w-full flex items-center justify-center gap-2 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors font-medium"

@@ -1,50 +1,49 @@
 import axios from 'axios';
 
-// Create axios instance with base configuration
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+    baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json'
     }
 });
 
-// Request interceptor to add auth token
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
+// Attach the auth token (if any) to every request
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
     }
-);
+    return config;
+});
 
-// Response interceptor for error handling
+// Called when the server says the session is no longer valid.
+// The auth store registers its logout here (avoids a circular import).
+let onUnauthorized = null;
+export const setUnauthorizedHandler = (handler) => {
+    onUnauthorized = handler;
+};
+
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response) {
-            // Server responded with error
-            const message = error.response.data?.error || 'An error occurred';
-            console.error('API Error:', message);
+        const status = error.response?.status;
+        const url = error.config?.url || '';
+        const isAuthAttempt = url.includes('/auth/login') || url.includes('/auth/register');
 
-            // Handle 401 Unauthorized
-            if (error.response.status === 401) {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                window.location.href = '/login';
-            }
-        } else if (error.request) {
-            // Request made but no response
-            console.error('Network Error:', error.request);
-        } else {
-            console.error('Error:', error.message);
+        // A 401 on login just means wrong credentials; anywhere else the session expired
+        if (status === 401 && !isAuthAttempt && localStorage.getItem('token') && onUnauthorized) {
+            onUnauthorized();
         }
         return Promise.reject(error);
     }
 );
+
+export const getErrorMessage = (error, fallback = 'Something went wrong') => {
+    if (error?.response?.data?.error) return error.response.data.error;
+    if (error?.request && !error?.response) return 'Cannot reach the server. Check your connection.';
+    return error?.message || fallback;
+};
 
 export default api;

@@ -53,8 +53,8 @@ class NotificationService {
         }
 
         const defaultOptions = {
-            icon: '/icon-192.png',
-            badge: '/icon-192.png',
+            icon: '/icon.svg',
+            badge: '/icon.svg',
             vibrate: [200, 100, 200],
             requireInteraction: false,
             ...options
@@ -82,7 +82,7 @@ class NotificationService {
         const title = `🚨 New Incident: ${incident.type}`;
         const options = {
             body: incident.title,
-            icon: '/icon-192.png',
+            icon: '/icon.svg',
             tag: `incident-${incident._id}`,
             requireInteraction: incident.severity === 'critical',
             data: {
@@ -115,7 +115,7 @@ class NotificationService {
         const title = `⚠️ CRITICAL ALERT: ${incident.type.toUpperCase()}`;
         const options = {
             body: `${incident.title}\n\nLocation: ${incident.location?.address || 'Unknown'}`,
-            icon: '/icon-192.png',
+            icon: '/icon.svg',
             tag: `critical-${incident._id}`,
             requireInteraction: true,
             vibrate: [300, 100, 300, 100, 300],
@@ -145,7 +145,7 @@ class NotificationService {
         const title = '✅ Incident Verified';
         const options = {
             body: `Your report "${incident.title}" has been verified`,
-            icon: '/icon-192.png',
+            icon: '/icon.svg',
             tag: `verified-${incident._id}`,
             data: {
                 incidentId: incident._id,
@@ -170,7 +170,7 @@ class NotificationService {
         const title = `${statusEmojis[newStatus] || '📢'} Status Update`;
         const options = {
             body: `Incident "${incident.title}" is now ${newStatus}`,
-            icon: '/icon-192.png',
+            icon: '/icon.svg',
             tag: `status-${incident._id}`,
             data: {
                 incidentId: incident._id,

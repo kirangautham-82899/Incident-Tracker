@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { LogIn, Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, Activity, Globe } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
 import toast from 'react-hot-toast';
 
 const LoginPage = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [showPassword, setShowPassword] = useState(false);
     const [focusedField, setFocusedField] = useState('');
     const [formData, setFormData] = useState({
@@ -19,8 +20,9 @@ const LoginPage = () => {
         const result = await login(formData);
 
         if (result.success) {
-            toast.success('Welcome back!');
-            navigate('/dashboard');
+            toast.success(`Welcome back, ${result.user.name}!`);
+            const staff = ['admin', 'responder'].includes(result.user.role);
+            navigate(location.state?.from || (staff ? '/admin' : '/dashboard'), { replace: true });
         } else {
             toast.error(result.error || 'Login failed');
         }
@@ -120,7 +122,7 @@ const LoginPage = () => {
                                 <div>
                                     <div className="flex justify-between mb-2">
                                         <label className="text-xs font-bold text-blue-400 uppercase tracking-wider">Password</label>
-                                        <a href="#" className="text-xs text-gray-500 hover:text-white transition-colors">Forgot Password?</a>
+                                        
                                     </div>
                                     <div className={`relative transition-all duration-300 group ${focusedField === 'password' ? 'scale-[1.02]' : ''}`}>
                                         <div className={`absolute inset-0 bg-blue-500/20 rounded-xl blur transition-opacity ${focusedField === 'password' ? 'opacity-100' : 'opacity-0'}`}></div>

@@ -30,7 +30,7 @@ const SocialShare = ({ incident, compact = false }) => {
                     text: shareText,
                     url: shareUrl,
                 });
-            } catch (err) {
+            } catch {
                 console.log('Share canceled');
             }
         } else {

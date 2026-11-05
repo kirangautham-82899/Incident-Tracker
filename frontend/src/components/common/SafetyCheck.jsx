@@ -81,7 +81,7 @@ const SafetyCheck = ({ className = '' }) => {
                     setChecking(false);
                 }
             },
-            (error) => {
+            () => {
                 toast.error('Could not get your location');
                 setChecking(false);
             },

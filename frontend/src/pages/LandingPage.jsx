@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
     Shield,
@@ -31,7 +31,7 @@ import Navbar from '../components/layout/Navbar';
 // Tech Radar & Live Log Component
 const LiveIncidentDemo = () => {
     const [incidents, setIncidents] = useState([]);
-    const [scanning, setScanning] = useState(true);
+
 
     // Simulated live feed data stream
     useEffect(() => {
@@ -257,7 +257,7 @@ const HowItWorks = () => {
             setActiveStep((prev) => (prev + 1) % steps.length);
         }, 4000);
         return () => clearInterval(interval);
-    }, [isPaused]);
+    }, [isPaused, steps.length]);
 
     return (
         <div className="py-24 bg-slate-900 relative overflow-hidden">
@@ -354,9 +354,11 @@ const HowItWorks = () => {
 
 const LandingPage = () => {
     const [isVisible, setIsVisible] = useState(false);
+    // Trigger the entrance animation after the first paint
 
     useEffect(() => {
-        setIsVisible(true);
+        const frame = requestAnimationFrame(() => setIsVisible(true));
+        return () => cancelAnimationFrame(frame);
     }, []);
 
     return (

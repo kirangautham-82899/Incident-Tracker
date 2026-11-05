@@ -37,7 +37,7 @@ class Chatbot {
                 "Check out the Map page to visualize incidents by location. It includes real-time updates, custom markers by severity, and clustering for dense areas."
             ],
             badges: [
-                "Earn badges by reporting verified incidents! Start as a Rookie, become a Hero at 5 reports, and reach Legend status at 20 reports! 🏆",
+                "Earn badges by reporting verified incidents! Start as a Rookie Reporter, become an Active Contributor at 5 reports, a Community Hero at 20 and a Legend at 50! 🏆",
                 "The gamification system rewards contributors with badges and reputation points. More verified reports = higher status and special privileges!",
                 "Your achievements are shown on your Profile page. Report incidents, get them verified, and climb the leaderboard to earn exclusive badges!"
             ],
@@ -82,23 +82,21 @@ class Chatbot {
     }
 
     shouldRespond(message, senderRole) {
-        // Respond to everyone (including admins) for testing
-        // if (senderRole === 'admin' || senderRole === 'responder') {
-        //     return false;
-        // }
-
-        // Don't respond to very short messages
-        if (message.length < 2) {
-            return false;
-        }
-
-        // Always respond
-        return true;
+        if (!message || message.trim().length < 2) return false;
+        const text = message.toLowerCase();
+        // Always answer when addressed directly
+        if (text.includes('@bot') || text.includes('assistant')) return true;
+        // Staff use the chat to coordinate; don't interrupt them
+        if (senderRole === 'admin' || senderRole === 'responder') return false;
+        // Answer citizens' questions, greetings and emergency keywords
+        return text.includes('?') ||
+            this.keywords.greetings.some(k => text.startsWith(k)) ||
+            this.keywords.emergency.some(k => text.includes(k));
     }
 
     createBotMessage(responseText) {
         return {
-            id: Date.now() + Math.random(),
+            id: `bot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             text: responseText,
             sender: {
                 name: 'AI Assistant',

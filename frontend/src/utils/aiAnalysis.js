@@ -3,6 +3,10 @@
  * Smart categorization, urgency detection, and duplicate prevention
  */
 
+// Whole-word match so "hit" does not match "white"
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const matchesWord = (text, keyword) => new RegExp(`\\b${escapeRegExp(keyword)}\\b`).test(text);
+
 // Urgency keywords by severity
 const URGENCY_KEYWORDS = {
     critical: ['emergency', 'urgent', 'critical', 'fatal', 'severe', 'life-threatening', 'danger', 'immediate'],
@@ -37,7 +41,7 @@ export const analyzeUrgency = (description) => {
     // Count keyword matches
     Object.entries(URGENCY_KEYWORDS).forEach(([level, keywords]) => {
         keywords.forEach(keyword => {
-            if (text.includes(keyword)) {
+            if (matchesWord(text, keyword)) {
                 scores[level]++;
             }
         });
@@ -73,7 +77,7 @@ export const suggestIncidentType = (description) => {
     Object.entries(TYPE_KEYWORDS).forEach(([type, keywords]) => {
         let score = 0;
         keywords.forEach(keyword => {
-            if (text.includes(keyword)) {
+            if (matchesWord(text, keyword)) {
                 score++;
             }
         });

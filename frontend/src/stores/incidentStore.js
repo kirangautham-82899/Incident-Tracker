@@ -1,140 +1,161 @@
 import { create } from 'zustand';
-import api from '../utils/api';
+import api, { getErrorMessage } from '../utils/api';
+
+const replaceIn = (list, incident) => list.map(inc => (inc._id === incident._id ? { ...inc, ...incident } : inc));
 
 const useIncidentStore = create((set, get) => ({
     incidents: [],
+    total: 0,
     currentIncident: null,
     isLoading: false,
+    hasLoaded: false,
     error: null,
     filters: {
         type: '',
         status: '',
-        severity: ''
+        severity: '',
+        search: '',
+        sort: '-createdAt'
     },
 
-    // Fetch all incidents
-    fetchIncidents: async (queryParams = {}) => {
-        set({ isLoading: true, error: null });
+    lastQuery: {},
+
+    // Re-run the last list query (used for polling when live updates are unavailable)
+    refresh: async () => {
         try {
-            const params = { ...get().filters, ...queryParams };
+            const params = Object.fromEntries(
+                Object.entries({ limit: 100, ...get().filters, ...get().lastQuery })
+                    .filter(([, v]) => v !== '' && v != null)
+            );
+            const response = await api.get('/incidents', { params });
+            set({ incidents: response.data.data, total: response.data.total });
+        } catch {
+            // keep showing the last data
+        }
+    },
+
+    // Fetch incidents using the current filters (plus optional overrides)
+    fetchIncidents: async (queryParams = {}) => {
+        set({ isLoading: true, error: null, lastQuery: queryParams });
+        try {
+            const params = Object.fromEntries(
+                Object.entries({ limit: 100, ...get().filters, ...queryParams })
+                    .filter(([, v]) => v !== '' && v != null)
+            );
             const response = await api.get('/incidents', { params });
             set({
                 incidents: response.data.data,
+                total: response.data.total,
                 isLoading: false,
-                error: null
+                hasLoaded: true
             });
             return { success: true, data: response.data.data };
         } catch (error) {
-            const errorMessage = error.response?.data?.error || 'Failed to fetch incidents';
-            set({ isLoading: false, error: errorMessage });
-            return { success: false, error: errorMessage };
+            const message = getErrorMessage(error, 'Failed to fetch incidents');
+            set({ isLoading: false, error: message, hasLoaded: true });
+            return { success: false, error: message };
         }
     },
 
-    // Fetch single incident
     fetchIncident: async (id) => {
-        set({ isLoading: true, error: null });
         try {
             const response = await api.get(`/incidents/${id}`);
-            set({
-                currentIncident: response.data.data,
-                isLoading: false,
-                error: null
-            });
+            set({ currentIncident: response.data.data });
             return { success: true, data: response.data.data };
         } catch (error) {
-            const errorMessage = error.response?.data?.error || 'Failed to fetch incident';
-            set({ isLoading: false, error: errorMessage });
-            return { success: false, error: errorMessage };
+            return { success: false, error: getErrorMessage(error, 'Failed to fetch incident') };
         }
     },
 
-    // Create new incident
     createIncident: async (incidentData) => {
         set({ isLoading: true, error: null });
         try {
             const response = await api.post('/incidents', incidentData);
             const newIncident = response.data.data;
-
-            set((state) => ({
-                incidents: [newIncident, ...state.incidents],
-                isLoading: false,
-                error: null
-            }));
-
-            return { success: true, data: newIncident };
+            get().addIncident(newIncident);
+            set({ isLoading: false });
+            return { success: true, data: newIncident, possibleDuplicates: response.data.possibleDuplicates };
         } catch (error) {
-            const errorMessage = error.response?.data?.error || 'Failed to create incident';
-            set({ isLoading: false, error: errorMessage });
-            return { success: false, error: errorMessage };
+            const message = getErrorMessage(error, 'Failed to create incident');
+            set({ isLoading: false, error: message });
+            return { success: false, error: message };
         }
     },
 
-    // Update incident status (Admin)
-    updateIncidentStatus: async (id, status) => {
+    // Staff: update status / severity / assignment
+    updateIncidentFields: async (id, updates) => {
         try {
-            const response = await api.put(`/incidents/${id}`, { status });
-            const updatedIncident = response.data.data;
-
-            set((state) => ({
-                incidents: state.incidents.map((inc) =>
-                    inc._id === id ? updatedIncident : inc
-                ),
-                currentIncident: state.currentIncident?._id === id ? updatedIncident : state.currentIncident
-            }));
-
-            return { success: true, data: updatedIncident };
+            const response = await api.put(`/incidents/${id}`, updates);
+            get().updateIncident(response.data.data);
+            return { success: true, data: response.data.data };
         } catch (error) {
-            const errorMessage = error.response?.data?.error || 'Failed to update status';
-            return { success: false, error: errorMessage };
+            return { success: false, error: getErrorMessage(error, 'Failed to update incident') };
         }
     },
 
-    // Verify incident
+    updateIncidentStatus: async (id, status) => get().updateIncidentFields(id, { status }),
+
+    addNote: async (id, note) => {
+        try {
+            const response = await api.post(`/incidents/${id}/notes`, { note });
+            get().updateIncident(response.data.data);
+            return { success: true, data: response.data.data };
+        } catch (error) {
+            return { success: false, error: getErrorMessage(error, 'Failed to add note') };
+        }
+    },
+
+    deleteIncident: async (id) => {
+        try {
+            await api.delete(`/incidents/${id}`);
+            get().removeIncident(id);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: getErrorMessage(error, 'Failed to delete incident') };
+        }
+    },
+
     verifyIncident: async (id) => {
         try {
             const response = await api.post(`/incidents/${id}/verify`);
-            const updatedIncident = response.data.data;
-
-            set((state) => ({
-                incidents: state.incidents.map((inc) =>
-                    inc._id === id ? updatedIncident : inc
-                ),
-                currentIncident: state.currentIncident?._id === id ? updatedIncident : state.currentIncident
-            }));
-
-            return { success: true, data: updatedIncident };
+            get().updateIncident(response.data.data);
+            return { success: true, data: response.data.data };
         } catch (error) {
-            const errorMessage = error.response?.data?.error || 'Failed to verify incident';
-            return { success: false, error: errorMessage };
+            return { success: false, error: getErrorMessage(error, 'Failed to verify incident') };
         }
     },
 
-    // Add incident to list (for real-time updates)
+    // Real-time helpers (idempotent: the creator also receives the socket event)
     addIncident: (incident) => {
-        set((state) => ({
-            incidents: [incident, ...state.incidents]
-        }));
+        set((state) => {
+            if (state.incidents.some(inc => inc._id === incident._id)) {
+                return { incidents: replaceIn(state.incidents, incident) };
+            }
+            return { incidents: [incident, ...state.incidents], total: state.total + 1 };
+        });
     },
 
-    // Update incident in list (for real-time updates)
-    updateIncident: (updatedIncident) => {
+    updateIncident: (incident) => {
         set((state) => ({
-            incidents: state.incidents.map((inc) =>
-                inc._id === updatedIncident._id ? updatedIncident : inc
-            ),
-            currentIncident: state.currentIncident?._id === updatedIncident._id
-                ? updatedIncident
+            incidents: replaceIn(state.incidents, incident),
+            currentIncident: state.currentIncident?._id === incident._id
+                ? { ...state.currentIncident, ...incident }
                 : state.currentIncident
         }));
     },
 
-    // Set filters
-    setFilters: (filters) => {
-        set({ filters });
+    removeIncident: (id) => {
+        set((state) => ({
+            incidents: state.incidents.filter(inc => inc._id !== id),
+            total: Math.max(0, state.total - (state.incidents.some(inc => inc._id === id) ? 1 : 0)),
+            currentIncident: state.currentIncident?._id === id ? null : state.currentIncident
+        }));
     },
 
-    // Clear error
+    setFilters: (filters) => {
+        set((state) => ({ filters: { ...state.filters, ...filters } }));
+    },
+
     clearError: () => set({ error: null })
 }));
 

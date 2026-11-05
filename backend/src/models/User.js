@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema({
         required: [true, 'Please provide an email'],
         unique: true,
         lowercase: true,
+        trim: true,
         match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
     },
     password: {
@@ -29,7 +30,8 @@ const userSchema = new mongoose.Schema({
     },
     phone: {
         type: String,
-        trim: true
+        trim: true,
+        maxlength: 20
     },
     reputation: {
         type: Number,
@@ -68,16 +70,19 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Method to get public profile
+// Public profile. Exposes both `_id` and `id` so the frontend can use either.
 userSchema.methods.toPublicJSON = function () {
     return {
+        _id: this._id,
         id: this._id,
         name: this.name,
         email: this.email,
         role: this.role,
+        phone: this.phone,
         reputation: this.reputation,
         incidentsReported: this.incidentsReported,
         incidentsVerified: this.incidentsVerified,
+        isActive: this.isActive,
         createdAt: this.createdAt
     };
 };

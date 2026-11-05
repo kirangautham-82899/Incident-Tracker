@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserPlus, Mail, Lock, User as UserIcon, CheckCircle, AlertCircle, Eye, EyeOff, ArrowRight, ShieldCheck, Activity, Globe } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
@@ -12,24 +12,20 @@ const SignupPage = () => {
         name: '',
         email: '',
         password: '',
-        confirmPassword: '',
-        role: 'citizen' // Default to citizen, can be changed to 'admin' for testing
+        confirmPassword: ''
     });
-    const [passwordStrength, setPasswordStrength] = useState(0);
     const [focusedField, setFocusedField] = useState('');
     const { register, isLoading } = useAuthStore();
 
-    useEffect(() => {
-        const checkStrength = (pass) => {
-            let strength = 0;
-            if (pass.length >= 8) strength++;
-            if (pass.match(/[a-z]/) && pass.match(/[A-Z]/)) strength++;
-            if (pass.match(/\d/)) strength++;
-            if (pass.match(/[^a-zA-Z\d]/)) strength++;
-            return strength;
-        };
-        setPasswordStrength(checkStrength(formData.password));
-    }, [formData.password]);
+    const passwordStrength = (() => {
+        const pass = formData.password;
+        let strength = 0;
+        if (pass.length >= 8) strength++;
+        if (/[a-z]/.test(pass) && /[A-Z]/.test(pass)) strength++;
+        if (/\d/.test(pass)) strength++;
+        if (/[^a-zA-Z\d]/.test(pass)) strength++;
+        return strength;
+    })();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -47,8 +43,7 @@ const SignupPage = () => {
         const result = await register({
             name: formData.name,
             email: formData.email,
-            password: formData.password,
-            role: formData.role || 'citizen' // Support admin registration
+            password: formData.password
         });
 
         if (result.success) {
@@ -264,19 +259,9 @@ const SignupPage = () => {
                                     </div>
                                 </div>
 
-                                {/* Admin Role Checkbox */}
-                                <div className="flex items-center gap-3 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20">
-                                    <input
-                                        type="checkbox"
-                                        id="adminRole"
-                                        checked={formData.role === 'admin'}
-                                        onChange={(e) => setFormData({ ...formData, role: e.target.checked ? 'admin' : 'citizen' })}
-                                        className="w-4 h-4 bg-slate-900 border-yellow-500/30 rounded checked:bg-yellow-500 focus:ring-yellow-500"
-                                    />
-                                    <label htmlFor="adminRole" className="text-xs font-mono text-yellow-400 cursor-pointer">
-                                        Register as <span className="font-bold">ADMIN</span> (for testing & dispatch access)
-                                    </label>
-                                </div>
+                                <p className="text-xs text-gray-400">
+                                    New accounts are citizen accounts. Responder and admin access is granted by an administrator.
+                                </p>
 
                                 {/* Submit Button */}
                                 <button

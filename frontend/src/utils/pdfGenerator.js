@@ -41,12 +41,16 @@ export const generateIncidentPDF = (incident) => {
     addField("Title", incident.title);
     addField("Type", incident.type.toUpperCase());
 
-    // Status Badge logic simulation in text
-    doc.setTextColor(incident.status === 'resolved' ? '0, 128, 0' : '255, 0, 0');
     addField("Status", incident.status.toUpperCase());
+    addField("Severity", (incident.severity || '').toUpperCase());
+    addField("Reported", `${new Date(incident.createdAt).toLocaleString()} by ${incident.reporter?.name || 'Anonymous'}`);
+    addField("Assigned Responder", incident.assignedTo?.name || 'Not assigned');
+    addField("Confirmations", String(incident.verificationCount || 0));
 
     // Location
-    addField("Location", incident.location?.address || 'Coordinates Only');
+    const coords = incident.location?.coordinates;
+    const coordText = coords?.length === 2 ? ` (${coords[1].toFixed(5)}, ${coords[0].toFixed(5)})` : '';
+    addField("Location", `${incident.location?.address || 'Pinned on map'}${coordText}`);
 
     // Description
     addField("Description", incident.description);
@@ -87,24 +91,24 @@ export const generateDashboardPDF = (stats, recentIncidents) => {
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text(`Total Incidents: ${stats.total}`, margin, 55);
-    doc.text(`Active Cases: ${stats.active}`, margin, 60);
-    doc.text(`Critical Alerts: ${stats.critical}`, margin, 65);
+    doc.text(`Open Incidents: ${stats.active}`, margin, 60);
+    doc.text(`High/Critical Open: ${stats.critical}`, margin, 65);
     doc.text(`Resolved: ${stats.resolved}`, margin, 70);
 
     // Recent Activity
     doc.setFontSize(14);
     doc.setTextColor(0);
-    doc.text("Recent Activity Log", margin, 85);
+    doc.text("Open Incidents (highest priority first)", margin, 85);
 
     let yPos = 95;
-    recentIncidents.slice(0, 5).forEach((incident, index) => {
+    recentIncidents.slice(0, 14).forEach((incident, index) => {
         doc.setFontSize(10);
         doc.setTextColor(0);
         doc.text(`${index + 1}. ${incident.title} (${incident.type.toUpperCase()})`, margin, yPos);
 
         doc.setFontSize(8);
         doc.setTextColor(100);
-        doc.text(`   Status: ${incident.status.toUpperCase()} | Rep: ${incident.reporter?.name || 'Anon'}`, margin, yPos + 5);
+        doc.text(`   Status: ${incident.status.toUpperCase()} | Severity: ${(incident.severity || "").toUpperCase()} | Reporter: ${incident.reporter?.name || 'Anon'}`, margin, yPos + 5);
 
         yPos += 12;
     });

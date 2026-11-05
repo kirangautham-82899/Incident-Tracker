@@ -1,183 +1,212 @@
 import React, { useEffect, useState } from 'react';
-import { Trophy, Award, Star, TrendingUp, Target, Shield } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Trophy, Star, Target, Shield, TrendingUp, Save } from 'lucide-react';
+import toast from 'react-hot-toast';
 import useAuthStore from '../stores/authStore';
-import useIncidentStore from '../stores/incidentStore';
-import { getEarnedBadges, calculateLevel, getNextBadge } from '../utils/gamification';
+import api from '../utils/api';
+import { getEarnedBadges, calculateLevel, getNextBadge, BADGES } from '../utils/gamification';
+import { STATUS_BADGE, STATUS_LABELS, ROLE_BADGE } from '../utils/constants';
+import { formatRelativeTime } from '../utils/helpers';
 import Navbar from '../components/layout/Navbar';
 
+const LEVEL_BADGE = {
+    gray: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
+    blue: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    green: 'bg-green-500/20 text-green-300 border-green-500/30',
+    purple: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+    orange: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+    gold: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
+};
+
+const STAT_TONE = {
+    blue: 'from-blue-500/20 to-cyan-500/10 border-blue-500/30 text-blue-300',
+    green: 'from-green-500/20 to-emerald-500/10 border-green-500/30 text-green-300',
+    purple: 'from-purple-500/20 to-pink-500/10 border-purple-500/30 text-purple-300'
+};
+
+const StatCard = ({ icon: Icon, label, value, tone }) => (
+    <div className={`p-5 rounded-2xl bg-gradient-to-br ${STAT_TONE[tone]} border`}>
+        <div className="flex items-center justify-between mb-2">
+            <Icon className="w-7 h-7" />
+            <div className="text-3xl font-black text-white">{value}</div>
+        </div>
+        <div className="text-xs font-bold uppercase tracking-wider">{label}</div>
+    </div>
+);
+
 const ProfilePage = () => {
-    const { user } = useAuthStore();
-    const { incidents } = useIncidentStore();
-    const [userStats, setUserStats] = useState(null);
+    const { user, refreshUser, updateProfile } = useAuthStore();
+    const [myReports, setMyReports] = useState([]);
+    const [loadingReports, setLoadingReports] = useState(true);
+    const [form, setForm] = useState({ name: user?.name || '', phone: user?.phone || '', currentPassword: '', newPassword: '' });
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        if (user) {
-            const earnedBadges = getEarnedBadges(user);
-            const level = calculateLevel(user.reputation);
-            const nextBadge = getNextBadge(user);
+        refreshUser();
+        api.get('/incidents', { params: { mine: 'true', limit: 50 } })
+            .then(res => setMyReports(res.data.data))
+            .catch(() => setMyReports([]))
+            .finally(() => setLoadingReports(false));
+    }, [refreshUser]);
 
-            // Calculate user-specific stats
-            const userIncidents = incidents.filter(inc => inc.reporter?.userId?._id === user._id || inc.reporter?.userId === user._id);
-            const verifiedIncidents = userIncidents.filter(inc => inc.verificationCount > 0);
+    if (!user) return null;
 
-            setUserStats({
-                earnedBadges,
-                level,
-                nextBadge,
-                totalReports: user.incidentsReported || 0,
-                verified: user.incidentsVerified || 0,
-                verificationRate: userIncidents.length > 0 ? ((verifiedIncidents.length / userIncidents.length) * 100).toFixed(0) : 0
-            });
+    const earnedBadges = getEarnedBadges(user);
+    const level = calculateLevel(user.reputation || 0);
+    const nextBadge = getNextBadge(user);
+    const confirmedReports = myReports.filter(r => r.verificationCount > 0 || ['verified', 'in-progress', 'resolved'].includes(r.status)).length;
+    const confirmationRate = myReports.length ? Math.round((confirmedReports / myReports.length) * 100) : 0;
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (form.newPassword && form.newPassword.length < 6) {
+            toast.error('New password must be at least 6 characters');
+            return;
         }
-    }, [user, incidents]);
+        setSaving(true);
+        const updates = { name: form.name, phone: form.phone };
+        if (form.newPassword) {
+            updates.currentPassword = form.currentPassword;
+            updates.newPassword = form.newPassword;
+        }
+        const result = await updateProfile(updates);
+        setSaving(false);
+        if (result.success) {
+            toast.success('Profile updated');
+            setForm(f => ({ ...f, currentPassword: '', newPassword: '' }));
+        } else {
+            toast.error(result.error);
+        }
+    };
 
-    if (!user || !userStats) {
-        return (
-            <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-                <div className="text-gray-500">Loading profile...</div>
-            </div>
-        );
-    }
+    const inputClass = 'w-full px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm focus:border-blue-500 outline-none';
 
     return (
         <div className="min-h-screen bg-slate-950 text-white">
-            {/* Background */}
-            <div className="fixed inset-0 pointer-events-none">
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.05]"></div>
-            </div>
-
             <Navbar />
 
-            <div className="pt-24 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
-                {/* Profile Header */}
-                <div className="mb-8 p-8 rounded-3xl bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-white/10 backdrop-blur-xl relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px]"></div>
-
-                    <div className="relative flex items-center gap-6">
-                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-4xl font-black">
+            <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-8">
+                <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-white/10">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-6">
+                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-3xl font-black">
                             {user.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                            <h1 className="text-4xl font-black mb-2">{user.name}</h1>
-                            <div className="flex items-center gap-4">
-                                <span className={`px-3 py-1 rounded-full text-sm font-bold bg-${userStats.level.color}-500/20 text-${userStats.level.color}-400 border border-${userStats.level.color}-500/30`}>
-                                    Level {userStats.level.level} - {userStats.level.name}
+                            <h1 className="text-3xl font-black mb-2">{user.name}</h1>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <span className={`px-3 py-1 rounded-full text-sm font-bold border ${LEVEL_BADGE[level.color]}`}>
+                                    Level {level.level} · {level.name}
                                 </span>
-                                <div className="flex items-center gap-2 text-yellow-400">
-                                    <Star className="w-5 h-5 fill-current" />
-                                    <span className="font-bold">{user.reputation} Reputation</span>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${ROLE_BADGE[user.role]}`}>{user.role}</span>
+                                <span className="flex items-center gap-1 text-yellow-400 font-bold">
+                                    <Star className="w-5 h-5 fill-current" /> {user.reputation} reputation
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <StatCard icon={Target} label="Reports submitted" value={user.incidentsReported || 0} tone="blue" />
+                    <StatCard icon={Shield} label="Incidents you confirmed" value={user.incidentsVerified || 0} tone="green" />
+                    <StatCard icon={TrendingUp} label="Your reports confirmed" value={`${confirmationRate}%`} tone="purple" />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <section className="p-6 rounded-2xl bg-slate-900/50 border border-white/10">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Trophy className="w-6 h-6 text-yellow-500" />
+                            <h2 className="text-xl font-black">Achievements</h2>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {Object.values(BADGES).map(badge => {
+                                const earned = earnedBadges.some(b => b.id === badge.id);
+                                return (
+                                    <div key={badge.id} className={`p-3 rounded-xl border text-center ${earned ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-slate-800/30 border-white/5 opacity-40'}`}>
+                                        <div className="text-3xl mb-1">{badge.icon}</div>
+                                        <div className="text-xs font-bold">{badge.name}</div>
+                                        <div className="text-[11px] text-gray-400">{badge.description}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {nextBadge && (
+                            <div className="mt-5">
+                                <div className="flex justify-between text-sm mb-2">
+                                    <span className="text-gray-400">Next: {nextBadge.badge.name}</span>
+                                    <span className="font-bold text-blue-400">{nextBadge.remaining} more report{nextBadge.remaining === 1 ? '' : 's'}</span>
+                                </div>
+                                <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500" style={{ width: `${nextBadge.progress}%` }} />
                                 </div>
                             </div>
-                        </div>
-                    </div>
+                        )}
+                        <p className="text-xs text-gray-500 mt-4">
+                            Reputation: +1 for each confirmation you give, +2 when your report is verified, +5 when it is resolved, −5 if it is marked false.
+                        </p>
+                    </section>
+
+                    <section className="p-6 rounded-2xl bg-slate-900/50 border border-white/10">
+                        <h2 className="text-xl font-black mb-4">Account</h2>
+                        <form onSubmit={handleSave} className="space-y-3">
+                            <label className="block text-xs text-gray-400 space-y-1">
+                                <span>Name</span>
+                                <input className={inputClass} value={form.name} maxLength={50} onChange={e => setForm({ ...form, name: e.target.value })} required />
+                            </label>
+                            <label className="block text-xs text-gray-400 space-y-1">
+                                <span>Email</span>
+                                <input className={`${inputClass} opacity-60`} value={user.email} disabled />
+                            </label>
+                            <label className="block text-xs text-gray-400 space-y-1">
+                                <span>Phone (shared with responders on your reports)</span>
+                                <input className={inputClass} value={form.phone} maxLength={20} onChange={e => setForm({ ...form, phone: e.target.value })} />
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <label className="block text-xs text-gray-400 space-y-1">
+                                    <span>Current password</span>
+                                    <input type="password" autoComplete="current-password" className={inputClass} value={form.currentPassword} onChange={e => setForm({ ...form, currentPassword: e.target.value })} />
+                                </label>
+                                <label className="block text-xs text-gray-400 space-y-1">
+                                    <span>New password</span>
+                                    <input type="password" autoComplete="new-password" className={inputClass} value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} />
+                                </label>
+                            </div>
+                            <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold disabled:opacity-50">
+                                <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save changes'}
+                            </button>
+                            <p className="text-xs text-gray-500">Member since {new Date(user.createdAt).toLocaleDateString()}</p>
+                        </form>
+                    </section>
                 </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <StatCard
-                        icon={Target}
-                        label="Reports Submitted"
-                        value={userStats.totalReports}
-                        color="blue"
-                    />
-                    <StatCard
-                        icon={Shield}
-                        label="Verifications"
-                        value={userStats.verified}
-                        color="green"
-                    />
-                    <StatCard
-                        icon={TrendingUp}
-                        label="Verification Rate"
-                        value={`${userStats.verificationRate}%`}
-                        color="purple"
-                    />
-                </div>
-
-                {/* Badges Section */}
-                <div className="mb-8 p-6 rounded-2xl bg-slate-900/50 border border-white/10 backdrop-blur-xl">
-                    <div className="flex items-center gap-3 mb-6">
-                        <Trophy className="w-6 h-6 text-yellow-500" />
-                        <h2 className="text-2xl font-black">Achievements</h2>
+                <section className="p-6 rounded-2xl bg-slate-900/50 border border-white/10">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-black">My reports</h2>
+                        <Link to="/report" className="text-sm text-blue-400 hover:underline">Report an incident</Link>
                     </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {userStats.earnedBadges.map(badge => (
-                            <BadgeCard key={badge.id} badge={badge} earned={true} />
-                        ))}
-                    </div>
-
-                    {/* Next Badge Progress */}
-                    {userStats.nextBadge && (
-                        <div className="mt-6 p-4 rounded-xl bg-slate-800/50 border border-white/5">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm text-gray-400">Next: {userStats.nextBadge.badge.name}</span>
-                                <span className="text-sm font-bold text-blue-400">{userStats.nextBadge.remaining} more</span>
-                            </div>
-                            <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
-                                    style={{ width: `${userStats.nextBadge.progress}%` }}
-                                ></div>
-                            </div>
-                        </div>
+                    {loadingReports ? (
+                        <p className="text-sm text-gray-500">Loading...</p>
+                    ) : myReports.length === 0 ? (
+                        <p className="text-sm text-gray-500">You haven't reported any incidents yet.</p>
+                    ) : (
+                        <ul className="divide-y divide-white/5">
+                            {myReports.map(r => (
+                                <li key={r._id}>
+                                    <Link to={`/incident/${r._id}`} className="flex items-center justify-between gap-3 py-3 hover:bg-white/5 px-2 rounded-lg">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-semibold truncate">{r.title}</div>
+                                            <div className="text-xs text-gray-500">{r.type} · {formatRelativeTime(r.createdAt)} · {r.verificationCount} confirmations</div>
+                                        </div>
+                                        <span className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-bold border ${STATUS_BADGE[r.status]}`}>{STATUS_LABELS[r.status]}</span>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
                     )}
-                </div>
-
-                {/* Activity Summary */}
-                <div className="p-6 rounded-2xl bg-slate-900/50 border border-white/10 backdrop-blur-xl">
-                    <h2 className="text-2xl font-black mb-4">Activity Summary</h2>
-                    <div className="space-y-3 text-sm">
-                        <div className="flex justify-between py-2 border-b border-white/5">
-                            <span className="text-gray-400">Member Since:</span>
-                            <span className="font-mono">{new Date(user.createdAt).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex justify-between py-2 border-b border-white/5">
-                            <span className="text-gray-400">Total Reports:</span>
-                            <span className="font-bold text-blue-400">{userStats.totalReports}</span>
-                        </div>
-                        <div className="flex justify-between py-2 border-b border-white/5">
-                            <span className="text-gray-400">Verifications Given:</span>
-                            <span className="font-bold text-green-400">{userStats.verified}</span>
-                        </div>
-                        <div className="flex justify-between py-2">
-                            <span className="text-gray-400">Trust Score:</span>
-                            <span className="font-bold text-purple-400">{user.reputation}/100</span>
-                        </div>
-                    </div>
-                </div>
+                </section>
             </div>
         </div>
     );
 };
-
-const StatCard = ({ icon: Icon, label, value, color }) => {
-    const colorClasses = {
-        blue: 'from-blue-500/20 to-cyan-500/20 border-blue-500/30 text-blue-400',
-        green: 'from-green-500/20 to-emerald-500/20 border-green-500/30 text-green-400',
-        purple: 'from-purple-500/20 to-pink-500/20 border-purple-500/30 text-purple-400'
-    };
-
-    return (
-        <div className={`p-6 rounded-2xl bg-gradient-to-br ${colorClasses[color]} border backdrop-blur-xl`}>
-            <div className="flex items-center justify-between mb-3">
-                <Icon className="w-8 h-8" />
-                <div className="text-3xl font-black">{value}</div>
-            </div>
-            <div className="text-xs font-bold uppercase tracking-wider opacity-80">{label}</div>
-        </div>
-    );
-};
-
-const BadgeCard = ({ badge, earned }) => (
-    <div className={`p-4 rounded-xl border backdrop-blur-xl transition-all ${earned
-            ? 'bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30'
-            : 'bg-slate-800/30 border-white/5 opacity-50'
-        }`}>
-        <div className="text-4xl text-center mb-2">{badge.icon}</div>
-        <div className="text-sm font-bold text-center mb-1">{badge.name}</div>
-        <div className="text-xs text-gray-500 text-center">{badge.description}</div>
-    </div>
-);
 
 export default ProfilePage;
