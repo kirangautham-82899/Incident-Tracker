@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Shield, CheckCircle, Play, XCircle, RotateCcw, Trash2, Send } from 'lucide-react';
+import { CheckCircle2, Play, XCircle, RotateCcw, Trash2, ArrowUp, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../../stores/authStore';
 import useIncidentStore from '../../stores/incidentStore';
-import { SEVERITY_OPTIONS, OPEN_STATUSES } from '../../utils/constants';
+import { SEVERITY_OPTIONS, SEVERITY_COLORS, OPEN_STATUSES } from '../../utils/constants';
 import { formatRelativeTime } from '../../utils/helpers';
 import { loadResponders } from '../../utils/responders';
+import { Button, Field, Segmented, Select } from '../ui';
 
 /**
  * Responder/admin controls for one incident: status workflow, severity,
@@ -26,16 +27,12 @@ const StaffActions = ({ incident, onDeleted }) => {
         setBusy(true);
         const result = await fn();
         setBusy(false);
-        if (result.success) {
-            if (successMessage) toast.success(successMessage);
-        } else {
-            toast.error(result.error);
-        }
+        if (result.success) { if (successMessage) toast.success(successMessage); }
+        else toast.error(result.error);
         return result;
     };
 
     const setStatus = (status, message) => run(() => updateIncidentFields(incident._id, { status }), message);
-
     const isOpen = OPEN_STATUSES.includes(incident.status);
     const assignedId = incident.assignedTo?._id || incident.assignedTo || '';
 
@@ -52,106 +49,97 @@ const StaffActions = ({ incident, onDeleted }) => {
         if (result.success && onDeleted) onDeleted();
     };
 
-    const btn = 'inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-50 border';
-
     return (
-        <div className="space-y-4 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
-            <div className="flex items-center gap-2 text-blue-300">
-                <Shield className="w-4 h-4" />
-                <h3 className="text-sm font-bold uppercase tracking-wider">Responder Controls</h3>
-            </div>
+        <section className="rounded-2xl bg-paper-deep/80 px-5 py-7 sm:px-6">
+            <h3 className="mb-6 flex items-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-ink-soft">
+                <Shield className="h-3.5 w-3.5" /> Responder controls
+            </h3>
 
             <div className="flex flex-wrap gap-2">
                 {incident.status === 'reported' && (
-                    <button disabled={busy} onClick={() => setStatus('verified', 'Marked as verified')} className={`${btn} bg-blue-600/20 border-blue-500/30 text-blue-300 hover:bg-blue-600/30`}>
-                        <CheckCircle className="w-4 h-4" /> Verify
-                    </button>
+                    <Button size="sm" variant="outline" loading={busy} onClick={() => setStatus('verified', 'Marked as verified')}>
+                        <CheckCircle2 className="h-4 w-4" /> Verify
+                    </Button>
                 )}
                 {['reported', 'verified'].includes(incident.status) && (
-                    <button disabled={busy} onClick={() => setStatus('in-progress', 'Response started')} className={`${btn} bg-purple-600/20 border-purple-500/30 text-purple-300 hover:bg-purple-600/30`}>
-                        <Play className="w-4 h-4" /> Start Response
-                    </button>
+                    <Button size="sm" variant="primary" disabled={busy} onClick={() => setStatus('in-progress', 'Response started')}>
+                        <Play className="h-4 w-4" /> Start response
+                    </Button>
                 )}
                 {isOpen && (
-                    <button disabled={busy} onClick={() => setStatus('resolved', 'Incident resolved')} className={`${btn} bg-green-600/20 border-green-500/30 text-green-300 hover:bg-green-600/30`}>
-                        <CheckCircle className="w-4 h-4" /> Resolve
-                    </button>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => setStatus('resolved', 'Incident resolved')} className="text-sev-low">
+                        <CheckCircle2 className="h-4 w-4" /> Resolve
+                    </Button>
                 )}
                 {isOpen && (
-                    <button disabled={busy} onClick={() => setStatus('false', 'Marked as false report')} className={`${btn} bg-gray-600/20 border-gray-500/30 text-gray-300 hover:bg-gray-600/30`}>
-                        <XCircle className="w-4 h-4" /> False Report
-                    </button>
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => setStatus('false', 'Marked as false report')}>
+                        <XCircle className="h-4 w-4" /> False report
+                    </Button>
                 )}
                 {!isOpen && (
-                    <button disabled={busy} onClick={() => setStatus('verified', 'Incident re-opened')} className={`${btn} bg-yellow-600/20 border-yellow-500/30 text-yellow-300 hover:bg-yellow-600/30`}>
-                        <RotateCcw className="w-4 h-4" /> Re-open
-                    </button>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => setStatus('verified', 'Incident re-opened')}>
+                        <RotateCcw className="h-4 w-4" /> Re-open
+                    </Button>
                 )}
                 {user?.role === 'admin' && (
-                    <button disabled={busy} onClick={handleDelete} className={`${btn} bg-red-600/20 border-red-500/30 text-red-300 hover:bg-red-600/30 ml-auto`}>
-                        <Trash2 className="w-4 h-4" /> Delete
-                    </button>
+                    <Button size="sm" variant="danger" disabled={busy} onClick={handleDelete} className="ml-auto">
+                        <Trash2 className="h-4 w-4" /> Delete
+                    </Button>
                 )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="text-xs text-gray-400 space-y-1">
-                    <span className="font-semibold">Severity</span>
-                    <select
+            <div className="mt-8 space-y-6">
+                <Field label="Severity">
+                    <Segmented
+                        options={SEVERITY_OPTIONS}
                         value={incident.severity}
-                        disabled={busy}
-                        onChange={(e) => run(() => updateIncidentFields(incident._id, { severity: e.target.value }), 'Severity updated')}
-                        className="w-full px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm"
-                    >
-                        {SEVERITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                </label>
-                <label className="text-xs text-gray-400 space-y-1">
-                    <span className="font-semibold">Assigned responder</span>
-                    <select
+                        colorFor={(v) => SEVERITY_COLORS[v]}
+                        onChange={(severity) => severity !== incident.severity && run(() => updateIncidentFields(incident._id, { severity }), 'Severity updated')}
+                    />
+                </Field>
+                <Field label="Assigned responder" htmlFor="assign">
+                    <Select
+                        id="assign"
                         value={assignedId}
                         disabled={busy}
                         onChange={(e) => run(() => updateIncidentFields(incident._id, { assignedTo: e.target.value || null }), e.target.value ? 'Responder assigned' : 'Assignment cleared')}
-                        className="w-full px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm"
                     >
                         <option value="">Unassigned</option>
                         {responders.map(r => (
-                            <option key={r._id} value={r._id}>
-                                {r.name} ({r.role}, {r.activeAssignments} active)
-                            </option>
+                            <option key={r._id} value={r._id}>{r.name} · {r.role} · {r.activeAssignments} active</option>
                         ))}
-                    </select>
-                </label>
-            </div>
+                    </Select>
+                </Field>
 
-            <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-gray-400">Internal notes (staff only)</h4>
-                {incident.adminNotes?.length > 0 && (
-                    <ul className="space-y-2 max-h-40 overflow-y-auto">
-                        {incident.adminNotes.slice().reverse().map((n) => (
-                            <li key={n._id} className="text-sm p-2 rounded-lg bg-slate-900/60 border border-white/5">
-                                <span className="text-gray-200">{n.note}</span>
-                                <div className="text-[11px] text-gray-500 mt-1">
-                                    {n.adminName || 'Staff'} · {formatRelativeTime(n.timestamp)}
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-                <form onSubmit={handleNote} className="flex gap-2">
-                    <input
-                        value={note}
-                        maxLength={500}
-                        onChange={(e) => setNote(e.target.value)}
-                        placeholder="e.g. Unit 4 dispatched, ETA 10 min"
-                        className="flex-1 px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500"
-                    />
-                    <button type="submit" disabled={busy || !note.trim()} aria-label="Add note" className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 rounded-lg text-white">
-                        <Send className="w-4 h-4" />
-                    </button>
-                </form>
+                <div>
+                    <div className="mb-3 text-[13px] font-medium text-ink-soft">Internal notes <span className="text-ink-faint">· staff only</span></div>
+                    {incident.adminNotes?.length > 0 && (
+                        <ul className="mb-3 space-y-3 border-l border-line-strong pl-4">
+                            {incident.adminNotes.slice().reverse().map((n) => (
+                                <li key={n._id} className="text-sm">
+                                    <p className="text-ink">{n.note}</p>
+                                    <p className="mt-0.5 text-[12px] text-ink-faint">{n.adminName || 'Staff'} · {formatRelativeTime(n.timestamp)}</p>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    <form onSubmit={handleNote} className="relative">
+                        <input
+                            value={note}
+                            maxLength={500}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="e.g. Unit 4 dispatched, ETA 10 min"
+                            aria-label="Internal note"
+                            className="field rounded-full bg-white py-3 pl-5 pr-14"
+                        />
+                        <button type="submit" disabled={busy || !note.trim()} aria-label="Add note"
+                            className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-ink text-paper transition-all hover:scale-105 disabled:opacity-20">
+                            <ArrowUp className="h-4 w-4" />
+                        </button>
+                    </form>
+                </div>
             </div>
-        </div>
+        </section>
     );
 };
 

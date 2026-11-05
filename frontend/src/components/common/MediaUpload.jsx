@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Upload, X, Loader } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import toast from 'react-hot-toast';
+import { EASE } from '../ui/motion';
 import api, { getErrorMessage } from '../../utils/api';
 
 const MAX_SIZE = 10 * 1024 * 1024;
@@ -113,63 +115,78 @@ const MediaUpload = ({ value = [], onChange, maxFiles = 5, onUploadingChange }) 
         setDragActive(e.type === 'dragenter' || e.type === 'dragover');
     };
 
+    const full = items.length >= maxFiles;
+
     return (
-        <div className="space-y-3">
-            <div
-                className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${dragActive ? 'border-blue-500 bg-blue-500/10' : 'border-white/20 bg-slate-900/50 hover:border-white/40'}`}
-                onDragEnter={onDrag}
-                onDragLeave={onDrag}
-                onDragOver={onDrag}
-                onDrop={(e) => { onDrag(e); setDragActive(false); handleFiles(e.dataTransfer.files); }}
-                onClick={() => inputRef.current?.click()}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && inputRef.current?.click()}
-            >
-                <input
-                    ref={inputRef}
-                    type="file"
-                    className="hidden"
-                    multiple
-                    accept="image/*,video/*"
-                    onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
-                />
-                <Upload className={`w-8 h-8 mx-auto mb-2 ${dragActive ? 'text-blue-400' : 'text-gray-400'}`} />
-                <p className="text-sm font-bold text-white">Add photos or videos</p>
-                <p className="text-xs text-gray-400">Drag and drop or click · up to {maxFiles} files, 10MB each</p>
-            </div>
+        <div className="space-y-4">
+            {!full && (
+                <div
+                    className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-10 text-center transition-colors duration-200 ${dragActive ? 'border-ink bg-paper-deep' : 'border-line-strong hover:border-ink-muted hover:bg-paper-deep/50'}`}
+                    onDragEnter={onDrag}
+                    onDragLeave={onDrag}
+                    onDragOver={onDrag}
+                    onDrop={(e) => { onDrag(e); setDragActive(false); handleFiles(e.dataTransfer.files); }}
+                    onClick={() => inputRef.current?.click()}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && inputRef.current?.click()}
+                >
+                    <input
+                        ref={inputRef}
+                        type="file"
+                        className="hidden"
+                        multiple
+                        accept="image/*,video/*"
+                        onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+                    />
+                    <motion.span animate={{ y: dragActive ? -4 : 0 }} className="mb-3 text-ink-muted">
+                        <Upload className="h-5 w-5" />
+                    </motion.span>
+                    <p className="text-sm font-medium">{dragActive ? 'Drop to attach' : 'Drop photos or videos, or click to browse'}</p>
+                    <p className="mt-1 text-[13px] text-ink-muted">Up to {maxFiles} files · 10 MB each</p>
+                </div>
+            )}
 
             {items.length > 0 && (
-                <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                    {items.map((item) => (
-                        <div key={item.id} className="relative">
-                            <div className="aspect-square rounded-xl overflow-hidden bg-slate-800 border border-white/10 relative">
-                                {item.type.startsWith('image/') ? (
-                                    <img src={item.preview} alt={item.name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <video src={item.preview} className="w-full h-full object-cover" muted />
+                <ul className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+                    <AnimatePresence initial={false}>
+                        {items.map((item) => (
+                            <motion.li
+                                key={item.id}
+                                layout
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                transition={{ duration: 0.3, ease: EASE }}
+                                className="group relative"
+                            >
+                                <div className="relative aspect-square overflow-hidden rounded-xl bg-paper-deep">
+                                    {item.type.startsWith('image/') ? (
+                                        <img src={item.preview} alt={item.name} className="h-full w-full object-cover" />
+                                    ) : (
+                                        <video src={item.preview} className="h-full w-full object-cover" muted />
+                                    )}
+                                    {item.status === 'uploading' && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-paper/70 backdrop-blur-[1px]">
+                                            <Loader className="h-5 w-5 animate-spin text-ink" />
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="mt-1.5 truncate text-[12px] text-ink-muted">{formatFileSize(item.size)}</p>
+                                {item.status !== 'uploading' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removeItem(item.id)}
+                                        aria-label={`Remove ${item.name}`}
+                                        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-ink/80 text-paper opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
                                 )}
-                                {item.status === 'uploading' && (
-                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                                        <Loader className="w-6 h-6 text-blue-400 animate-spin" />
-                                    </div>
-                                )}
-                            </div>
-                            <p className="text-[11px] text-gray-400 truncate mt-1">{item.name}</p>
-                            <p className="text-[11px] text-gray-500">{formatFileSize(item.size)}</p>
-                            {item.status !== 'uploading' && (
-                                <button
-                                    type="button"
-                                    onClick={() => removeItem(item.id)}
-                                    aria-label={`Remove ${item.name}`}
-                                    className="absolute top-1 right-1 p-1 bg-red-500 hover:bg-red-600 rounded-full shadow-lg"
-                                >
-                                    <X className="w-3 h-3 text-white" />
-                                </button>
-                            )}
-                        </div>
-                    ))}
-                </div>
+                            </motion.li>
+                        ))}
+                    </AnimatePresence>
+                </ul>
             )}
         </div>
     );

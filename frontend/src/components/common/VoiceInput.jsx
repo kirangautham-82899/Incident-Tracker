@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Loader } from 'lucide-react';
+import { Mic, MicOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const VoiceInput = ({ onTranscript }) => {
     const [isListening, setIsListening] = useState(false);
-    const [transcript, setTranscript] = useState('');
+    const [, setTranscript] = useState('');
     const recognitionRef = useRef(null);
 
     useEffect(() => {
@@ -66,43 +66,34 @@ const VoiceInput = ({ onTranscript }) => {
             setTranscript('');
             recognitionRef.current.start();
             setIsListening(true);
-            toast.success('Listening... Speak now!');
-        }
+                    }
     };
 
     return (
-        <div className="relative">
-            <button
-                type="button"
-                onClick={toggleListening}
-                className={`p-3 rounded-xl border transition-all duration-300 ${isListening
-                        ? 'bg-red-500/20 border-red-500/50 text-red-400 animate-pulse'
-                        : 'bg-slate-800/50 border-white/10 text-gray-400 hover:border-white/20 hover:text-white'
-                    }`}
-                title={isListening ? 'Stop recording' : 'Start voice input'}
-            >
-                {isListening ? (
-                    <MicOff className="w-5 h-5" />
-                ) : (
-                    <Mic className="w-5 h-5" />
-                )}
-            </button>
-
-            {isListening && (
-                <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-red-500/90 backdrop-blur-sm rounded-lg border border-red-400 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                        <Loader className="w-4 h-4 animate-spin text-white" />
-                        <span className="text-white text-sm font-bold">Recording...</span>
-                    </div>
-                </div>
+        <button
+            type="button"
+            onClick={toggleListening}
+            aria-pressed={isListening}
+            title={isListening ? 'Stop voice input' : 'Dictate with your voice'}
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${isListening
+                ? 'bg-signal text-white'
+                : 'text-ink-muted ring-1 ring-inset ring-line-strong hover:text-ink hover:ring-ink'}`}
+        >
+            {isListening ? (
+                <>
+                    <span className="relative flex h-2 w-2">
+                        <span className="absolute inset-0 animate-pulse-dot rounded-full bg-white" />
+                        <span className="relative h-2 w-2 rounded-full bg-white" />
+                    </span>
+                    Listening… tap to stop
+                    <MicOff className="h-3.5 w-3.5" />
+                </>
+            ) : (
+                <>
+                    <Mic className="h-3.5 w-3.5" /> Dictate
+                </>
             )}
-
-            {transcript && !isListening && (
-                <div className="mt-2 p-2 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                    <p className="text-xs text-blue-300 font-mono">{transcript}</p>
-                </div>
-            )}
-        </div>
+        </button>
     );
 };
 

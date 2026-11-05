@@ -1,37 +1,42 @@
 import React, { useEffect, useState } from 'react';
-import { ClipboardList, RefreshCw, Search, X } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
+import { Inbox, RefreshCw, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useIncidentStore from '../../stores/incidentStore';
-import IncidentCard from './IncidentCard';
-import Loading from '../common/Loading';
-import { INCIDENT_TYPE_OPTIONS, SEVERITY_OPTIONS, STATUS_OPTIONS } from '../../utils/constants';
+import IncidentRow from './IncidentCard';
+import IncidentDetailModal from './IncidentDetailModal';
+import { Button, EmptyState, IconButton, Select, Spinner, Tabs } from '../ui';
+import { INCIDENT_TYPE_OPTIONS, SEVERITY_OPTIONS, OPEN_STATUSES } from '../../utils/constants';
 
-const selectClass = 'px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-sm text-gray-200 focus:border-blue-500 outline-none';
+const STATUS_TABS = [
+    { value: '', label: 'All' },
+    { value: 'open', label: 'Open' },
+    { value: 'reported', label: 'Needs confirming' },
+    { value: 'in-progress', label: 'In progress' },
+    { value: 'resolved', label: 'Resolved' }
+];
 
 const IncidentList = () => {
     const { incidents, total, filters, setFilters, fetchIncidents, verifyIncident, isLoading, hasLoaded, error } = useIncidentStore();
     const [searchText, setSearchText] = useState(filters.search);
+    const [selectedId, setSelectedId] = useState(null);
 
-    // Refetch whenever a filter changes
     useEffect(() => {
         fetchIncidents();
     }, [filters, fetchIncidents]);
 
-    // Debounce the free-text search
+    // Debounced free-text search
     useEffect(() => {
         const timer = setTimeout(() => {
             if (searchText !== filters.search) setFilters({ search: searchText });
-        }, 400);
+        }, 350);
         return () => clearTimeout(timer);
     }, [searchText, filters.search, setFilters]);
 
     const handleVerify = async (id) => {
         const result = await verifyIncident(id);
-        if (result.success) {
-            toast.success('Thanks for confirming this incident');
-        } else {
-            toast.error(result.error || 'Failed to verify');
-        }
+        if (result.success) toast.success('Thanks for confirming');
+        else toast.error(result.error || 'Failed to confirm');
     };
 
     const hasFilters = filters.type || filters.status || filters.severity || filters.search;
@@ -40,92 +45,80 @@ const IncidentList = () => {
         setFilters({ type: '', status: '', severity: '', search: '' });
     };
 
-    // Socket events add new incidents regardless of filters; hide ones that don't match
+    // Live socket/poll updates add incidents regardless of filters: hide non-matching ones
     const visible = incidents.filter(inc =>
         (!filters.type || inc.type === filters.type) &&
         (!filters.severity || inc.severity === filters.severity) &&
-        (!filters.status || (filters.status === 'open'
-            ? ['reported', 'verified', 'in-progress'].includes(inc.status)
-            : inc.status === filters.status))
+        (!filters.status || (filters.status === 'open' ? OPEN_STATUSES.includes(inc.status) : inc.status === filters.status))
     );
+    const selected = incidents.find(i => i._id === selectedId);
 
     return (
-        <div className="space-y-4 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-                <div className="relative flex-1 min-w-[180px]">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <div>
+            <Tabs tabs={STATUS_TABS} value={filters.status} onChange={(status) => setFilters({ status })} />
+
+            <div className="flex flex-wrap items-center gap-3 py-5">
+                <div className="relative min-w-[220px] flex-1">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
                     <input
                         value={searchText}
                         onChange={(e) => setSearchText(e.target.value)}
-                        placeholder="Search title, description, address or ID"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:border-blue-500 outline-none"
+                        placeholder="Search by title, place or #ID"
+                        aria-label="Search incidents"
+                        className="field pl-10"
                     />
                 </div>
-                <select aria-label="Filter by type" value={filters.type} onChange={(e) => setFilters({ type: e.target.value })} className={selectClass}>
+                <Select aria-label="Type" value={filters.type} onChange={(e) => setFilters({ type: e.target.value })} className="w-auto">
                     <option value="">All types</option>
                     {INCIDENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <select aria-label="Filter by status" value={filters.status} onChange={(e) => setFilters({ status: e.target.value })} className={selectClass}>
-                    <option value="">All statuses</option>
-                    <option value="open">Open (not closed)</option>
-                    {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <select aria-label="Filter by severity" value={filters.severity} onChange={(e) => setFilters({ severity: e.target.value })} className={selectClass}>
-                    <option value="">All severities</option>
+                </Select>
+                <Select aria-label="Severity" value={filters.severity} onChange={(e) => setFilters({ severity: e.target.value })} className="w-auto">
+                    <option value="">Any severity</option>
                     {SEVERITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <select aria-label="Sort" value={filters.sort} onChange={(e) => setFilters({ sort: e.target.value })} className={selectClass}>
-                    <option value="-createdAt">Newest first</option>
-                    <option value="-priority">Highest priority</option>
+                </Select>
+                <Select aria-label="Sort" value={filters.sort} onChange={(e) => setFilters({ sort: e.target.value })} className="w-auto">
+                    <option value="-createdAt">Newest</option>
+                    <option value="-priority">Most urgent</option>
                     <option value="-verificationCount">Most confirmed</option>
-                    <option value="createdAt">Oldest first</option>
-                </select>
+                    <option value="createdAt">Oldest</option>
+                </Select>
+                <IconButton label="Refresh" onClick={() => fetchIncidents()}>
+                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </IconButton>
+            </div>
+
+            <div className="flex items-center justify-between border-b border-line pb-3 text-[13px] text-ink-muted">
+                <span>{visible.length} of {total} incident{total === 1 ? '' : 's'}</span>
                 {hasFilters && (
-                    <button onClick={clearFilters} className="px-3 py-2 text-sm text-gray-400 hover:text-white flex items-center gap-1">
-                        <X className="w-4 h-4" /> Clear
+                    <button onClick={clearFilters} className="flex items-center gap-1 font-medium text-ink-soft hover:text-ink">
+                        <X className="h-3.5 w-3.5" /> Clear filters
                     </button>
                 )}
-                <button
-                    onClick={() => fetchIncidents()}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                    title="Refresh"
-                    aria-label="Refresh"
-                >
-                    <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-                </button>
             </div>
 
-            <div className="text-xs text-gray-500">
-                Showing {visible.length} of {total} incident{total === 1 ? '' : 's'}
-            </div>
-
-            {error && (
-                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-300">
-                    {error}
-                </div>
-            )}
+            {error && <p className="py-4 text-sm text-sev-critical">{error}</p>}
 
             {!hasLoaded && isLoading ? (
-                <Loading text="Loading incidents..." />
+                <Spinner label="Loading incidents" />
             ) : visible.length === 0 ? (
-                <div className="text-center py-16 bg-slate-800/30 rounded-2xl border border-white/5">
-                    <div className="inline-flex p-4 rounded-full bg-slate-700/50 mb-4">
-                        <ClipboardList className="w-10 h-10 text-gray-500" />
-                    </div>
-                    <h3 className="text-lg font-bold text-white mb-1">
-                        {hasFilters ? 'No incidents match these filters' : 'No incidents reported yet'}
-                    </h3>
-                    <p className="text-gray-400 text-sm">
-                        {hasFilters ? 'Try clearing the filters.' : 'New reports will appear here in real time.'}
-                    </p>
-                </div>
+                <EmptyState
+                    icon={Inbox}
+                    title={hasFilters ? 'Nothing matches these filters' : 'No incidents reported yet'}
+                    action={hasFilters ? <Button variant="outline" onClick={clearFilters}>Clear filters</Button> : <Button to="/report">Report an incident</Button>}
+                >
+                    {hasFilters ? 'Try a different status or clear the search.' : 'New reports appear here automatically.'}
+                </EmptyState>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                    {visible.map((incident) => (
-                        <IncidentCard key={incident._id} incident={incident} onVerify={handleVerify} />
-                    ))}
-                </div>
+                <ul>
+                    <AnimatePresence initial={false}>
+                        {visible.map(incident => (
+                            <IncidentRow key={incident._id} incident={incident} onOpen={(i) => setSelectedId(i._id)} onVerify={handleVerify} />
+                        ))}
+                    </AnimatePresence>
+                </ul>
             )}
+
+            <IncidentDetailModal incident={selected} isOpen={Boolean(selected)} onClose={() => setSelectedId(null)} />
         </div>
     );
 };

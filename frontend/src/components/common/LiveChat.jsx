@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, X, Send, Minimize2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { MessageCircle, X, ArrowUp, Minus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../../stores/authStore';
 import socketService from '../../utils/socket';
-import { ROLE_BADGE } from '../../utils/constants';
+import { IconButton, RoleTag, cx } from '../ui';
+import { EASE } from '../ui/motion';
 import { sameId } from '../../utils/helpers';
 
 /**
@@ -65,100 +67,105 @@ const LiveChat = () => {
         setNewMessage('');
     };
 
-    if (!isOpen) {
-        return (
-            <button
-                onClick={openChat}
-                aria-label="Open community chat"
-                className="fixed bottom-6 right-6 z-50 p-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full shadow-2xl transition-transform hover:scale-110"
+    const visible = isOpen && !isMinimized;
+
+    return (
+        <div className="fixed bottom-5 right-5 z-[1200] flex flex-col items-end gap-3">
+            <AnimatePresence>
+                {visible && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 16, scale: 0.97 }}
+                        transition={{ duration: 0.3, ease: EASE }}
+                        className="flex h-[min(520px,75vh)] w-[min(380px,calc(100vw-2.5rem))] origin-bottom-right flex-col overflow-hidden rounded-3xl bg-paper shadow-[0_30px_80px_-30px_rgba(22,22,26,0.5)] ring-1 ring-line"
+                        aria-label="Community chat"
+                    >
+                        <header className="flex items-center justify-between border-b border-line px-5 py-4">
+                            <div>
+                                <h3 className="font-semibold tracking-tight">Community chat</h3>
+                                <p className="flex items-center gap-1.5 text-[12px] text-ink-muted">
+                                    <span className={cx('h-1.5 w-1.5 rounded-full', socketService.connected ? 'bg-sev-low' : 'bg-ink-faint')} />
+                                    {socketService.connected ? 'Connected' : 'Reconnecting…'} · ask a question or mention @bot
+                                </p>
+                            </div>
+                            <IconButton label="Close chat" onClick={() => setIsMinimized(true)}><Minus className="h-4 w-4" /></IconButton>
+                        </header>
+
+                        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                            {messages.length === 0 ? (
+                                <p className="py-16 text-center text-sm text-ink-muted">No messages yet. Say hello.</p>
+                            ) : (
+                                messages.map((msg) => {
+                                    const isOwn = sameId(msg.sender?._id, user);
+                                    return (
+                                        <motion.div
+                                            key={msg.id}
+                                            initial={{ opacity: 0, y: 6 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ duration: 0.25, ease: EASE }}
+                                            className={cx('flex flex-col', isOwn ? 'items-end' : 'items-start')}
+                                        >
+                                            {!isOwn && (
+                                                <div className="mb-1 flex items-center gap-2 text-[12px]">
+                                                    <span className="font-medium">{msg.sender?.name}</span>
+                                                    <RoleTag role={msg.sender?.role} />
+                                                </div>
+                                            )}
+                                            <p className={cx('max-w-[85%] break-words rounded-2xl px-4 py-2 text-[14px] leading-relaxed',
+                                                isOwn ? 'rounded-br-md bg-ink text-paper' : 'rounded-bl-md bg-paper-deep text-ink')}>
+                                                {msg.text}
+                                            </p>
+                                            <span className="mt-1 text-[11px] text-ink-faint">
+                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </motion.div>
+                                    );
+                                })
+                            )}
+                            <div ref={messagesEndRef} />
+                        </div>
+
+                        <div className="border-t border-line p-3">
+                            {isAuthenticated ? (
+                                <form onSubmit={handleSendMessage} className="relative">
+                                    <input
+                                        value={newMessage}
+                                        maxLength={500}
+                                        onChange={(e) => setNewMessage(e.target.value)}
+                                        placeholder="Message…"
+                                        aria-label="Chat message"
+                                        className="field rounded-full py-2.5 pl-4 pr-12"
+                                    />
+                                    <button type="submit" disabled={!newMessage.trim()} aria-label="Send"
+                                        className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-ink text-paper transition-all disabled:opacity-20">
+                                        <ArrowUp className="h-4 w-4" />
+                                    </button>
+                                </form>
+                            ) : (
+                                <p className="py-2 text-center text-sm text-ink-muted">
+                                    <Link to="/login" className="link-underline font-medium text-ink">Log in</Link> to chat
+                                </p>
+                            )}
+                        </div>
+                    </motion.section>
+                )}
+            </AnimatePresence>
+
+            <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => (visible ? setIsMinimized(true) : openChat())}
+                aria-label={visible ? 'Close community chat' : 'Open community chat'}
+                className="relative flex h-14 w-14 items-center justify-center rounded-full bg-ink text-paper shadow-[0_16px_40px_-12px_rgba(22,22,26,0.6)]"
             >
-                <MessageCircle className="w-6 h-6" />
-                {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold">
+                {visible ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
+                {!visible && unreadCount > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-signal px-1 text-[11px] font-semibold text-white">
                         {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                 )}
-            </button>
-        );
-    }
-
-    return (
-        <div className={`fixed bottom-4 right-4 left-4 sm:left-auto z-50 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col ${isMinimized ? 'sm:w-80' : 'sm:w-96 h-[500px] max-h-[80vh]'}`}>
-            <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-t-2xl">
-                <div className="flex items-center gap-2">
-                    <MessageCircle className="w-5 h-5 text-blue-400" />
-                    <h3 className="font-bold text-white">Community Chat</h3>
-                    <span className={`w-2 h-2 rounded-full ${socketService.connected ? 'bg-green-500' : 'bg-gray-500'}`} />
-                </div>
-                <div className="flex items-center gap-1">
-                    <button onClick={() => (isMinimized ? openChat() : setIsMinimized(true))} aria-label={isMinimized ? 'Expand chat' : 'Minimize chat'} className="p-1.5 hover:bg-white/10 rounded-lg">
-                        <Minimize2 className="w-4 h-4 text-gray-400" />
-                    </button>
-                    <button onClick={() => setIsOpen(false)} aria-label="Close chat" className="p-1.5 hover:bg-white/10 rounded-lg">
-                        <X className="w-4 h-4 text-gray-400" />
-                    </button>
-                </div>
-            </div>
-
-            {!isMinimized && (
-                <>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                        {messages.length === 0 ? (
-                            <div className="text-center py-12">
-                                <MessageCircle className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                                <p className="text-gray-400 text-sm">No messages yet</p>
-                                <p className="text-gray-500 text-xs mt-1">Ask a question. The assistant answers questions, or mention @bot.</p>
-                            </div>
-                        ) : (
-                            messages.map((msg) => {
-                                const isOwn = sameId(msg.sender?._id, user);
-                                return (
-                                    <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                                        <div className="max-w-[80%]">
-                                            <div className={`flex items-center gap-2 mb-1 ${isOwn ? 'justify-end' : ''}`}>
-                                                <span className="text-xs font-bold text-gray-400">{isOwn ? 'You' : msg.sender?.name}</span>
-                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${ROLE_BADGE[msg.sender?.role] || ROLE_BADGE.citizen}`}>
-                                                    {msg.sender?.role === 'bot' ? 'assistant' : msg.sender?.role}
-                                                </span>
-                                            </div>
-                                            <div className={`px-4 py-2 rounded-2xl ${isOwn ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-gray-200 rounded-tl-none'}`}>
-                                                <p className="text-sm break-words">{msg.text}</p>
-                                            </div>
-                                            <span className="text-[11px] text-gray-500 mt-1 block">
-                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        )}
-                        <div ref={messagesEndRef} />
-                    </div>
-
-                    <div className="p-4 border-t border-white/10">
-                        {isAuthenticated ? (
-                            <form onSubmit={handleSendMessage} className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={newMessage}
-                                    maxLength={500}
-                                    onChange={(e) => setNewMessage(e.target.value)}
-                                    placeholder="Type a message..."
-                                    aria-label="Chat message"
-                                    className="flex-1 px-4 py-2 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-blue-500 outline-none text-sm"
-                                />
-                                <button type="submit" disabled={!newMessage.trim()} aria-label="Send" className="p-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white rounded-xl">
-                                    <Send className="w-5 h-5" />
-                                </button>
-                            </form>
-                        ) : (
-                            <p className="text-center text-xs text-gray-400">
-                                <Link to="/login" className="text-blue-400 hover:underline">Log in</Link> to join the chat
-                            </p>
-                        )}
-                    </div>
-                </>
-            )}
+            </motion.button>
         </div>
     );
 };

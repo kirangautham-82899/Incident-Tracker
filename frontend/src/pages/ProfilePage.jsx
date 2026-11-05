@@ -1,38 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Star, Target, Shield, TrendingUp, Save } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ChevronRight, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../stores/authStore';
 import api from '../utils/api';
 import { getEarnedBadges, calculateLevel, getNextBadge, BADGES } from '../utils/gamification';
-import { STATUS_BADGE, STATUS_LABELS, ROLE_BADGE } from '../utils/constants';
+import { SEVERITY_COLORS, TYPE_LABELS } from '../utils/constants';
 import { formatRelativeTime } from '../utils/helpers';
-import Navbar from '../components/layout/Navbar';
-
-const LEVEL_BADGE = {
-    gray: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
-    blue: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-    green: 'bg-green-500/20 text-green-300 border-green-500/30',
-    purple: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-    orange: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-    gold: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
-};
-
-const STAT_TONE = {
-    blue: 'from-blue-500/20 to-cyan-500/10 border-blue-500/30 text-blue-300',
-    green: 'from-green-500/20 to-emerald-500/10 border-green-500/30 text-green-300',
-    purple: 'from-purple-500/20 to-pink-500/10 border-purple-500/30 text-purple-300'
-};
-
-const StatCard = ({ icon: Icon, label, value, tone }) => (
-    <div className={`p-5 rounded-2xl bg-gradient-to-br ${STAT_TONE[tone]} border`}>
-        <div className="flex items-center justify-between mb-2">
-            <Icon className="w-7 h-7" />
-            <div className="text-3xl font-black text-white">{value}</div>
-        </div>
-        <div className="text-xs font-bold uppercase tracking-wider">{label}</div>
-    </div>
-);
+import { Button, Container, EmptyState, Field, Input, RoleTag, Section, Spinner, Stat, StatRow, StatusTag, cx } from '../components/ui';
+import { AnimatedNumber, EASE, PageTransition, staggerItem, staggerParent } from '../components/ui/motion';
 
 const ProfilePage = () => {
     const { user, refreshUser, updateProfile } = useAuthStore();
@@ -51,16 +28,16 @@ const ProfilePage = () => {
 
     if (!user) return null;
 
-    const earnedBadges = getEarnedBadges(user);
+    const earned = getEarnedBadges(user);
     const level = calculateLevel(user.reputation || 0);
     const nextBadge = getNextBadge(user);
-    const confirmedReports = myReports.filter(r => r.verificationCount > 0 || ['verified', 'in-progress', 'resolved'].includes(r.status)).length;
-    const confirmationRate = myReports.length ? Math.round((confirmedReports / myReports.length) * 100) : 0;
+    const confirmed = myReports.filter(r => r.verificationCount > 0 || ['verified', 'in-progress', 'resolved'].includes(r.status)).length;
+    const confirmationRate = myReports.length ? Math.round((confirmed / myReports.length) * 100) : 0;
 
     const handleSave = async (e) => {
         e.preventDefault();
         if (form.newPassword && (form.newPassword.length < 8 || !/[A-Za-z]/.test(form.newPassword) || !/[0-9]/.test(form.newPassword))) {
-            toast.error('New password must be at least 8 characters and include a letter and a number');
+            toast.error('New password needs 8+ characters with a letter and a number');
             return;
         }
         setSaving(true);
@@ -72,140 +49,138 @@ const ProfilePage = () => {
         const result = await updateProfile(updates);
         setSaving(false);
         if (result.success) {
-            toast.success('Profile updated');
+            toast.success(form.newPassword ? 'Saved. Other sessions were signed out.' : 'Profile saved');
             setForm(f => ({ ...f, currentPassword: '', newPassword: '' }));
         } else {
             toast.error(result.error);
         }
     };
 
-    const inputClass = 'w-full px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm focus:border-blue-500 outline-none';
-
     return (
-        <div className="min-h-screen bg-slate-950 text-white">
-            <Navbar />
-
-            <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-8">
-                <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-white/10">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-6">
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-3xl font-black">
+        <PageTransition>
+            <Container>
+                {/* Identity header */}
+                <header className="flex flex-col gap-8 pb-10 pt-12 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="flex items-center gap-6">
+                        <motion.div
+                            initial={{ scale: 0.6, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ duration: 0.6, ease: EASE }}
+                            className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-ink font-display text-3xl font-semibold text-paper"
+                        >
                             {user.name.charAt(0).toUpperCase()}
-                        </div>
+                        </motion.div>
                         <div>
-                            <h1 className="text-3xl font-black mb-2">{user.name}</h1>
-                            <div className="flex flex-wrap items-center gap-3">
-                                <span className={`px-3 py-1 rounded-full text-sm font-bold border ${LEVEL_BADGE[level.color]}`}>
-                                    Level {level.level} · {level.name}
-                                </span>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${ROLE_BADGE[user.role]}`}>{user.role}</span>
-                                <span className="flex items-center gap-1 text-yellow-400 font-bold">
-                                    <Star className="w-5 h-5 fill-current" /> {user.reputation} reputation
-                                </span>
+                            <motion.h1
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, ease: EASE, delay: 0.1 }}
+                                className="text-4xl font-semibold tracking-tightest"
+                            >
+                                {user.name}
+                            </motion.h1>
+                            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-ink-muted">
+                                <RoleTag role={user.role} />
+                                <span>Level {level.level} · <span className="font-serif text-base italic text-ink-soft">{level.name}</span></span>
+                                <span>Member since {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>
                             </div>
                         </div>
                     </div>
-                </div>
+                    <Button to="/report" variant="signal">Report an incident</Button>
+                </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <StatCard icon={Target} label="Reports submitted" value={user.incidentsReported || 0} tone="blue" />
-                    <StatCard icon={Shield} label="Incidents you confirmed" value={user.incidentsVerified || 0} tone="green" />
-                    <StatCard icon={TrendingUp} label="Your reports confirmed" value={`${confirmationRate}%`} tone="purple" />
-                </div>
+                <StatRow>
+                    <Stat label="Reputation" value={<AnimatedNumber value={user.reputation || 0} />} tone="#E5402A" />
+                    <Stat label="Reports" value={<AnimatedNumber value={user.incidentsReported || 0} />} />
+                    <Stat label="Confirmations given" value={<AnimatedNumber value={user.incidentsVerified || 0} />} />
+                    <Stat label="Reports confirmed" value={<><AnimatedNumber value={confirmationRate} />%</>} tone="#2F9E6E" />
+                </StatRow>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <section className="p-6 rounded-2xl bg-slate-900/50 border border-white/10">
-                        <div className="flex items-center gap-3 mb-4">
-                            <Trophy className="w-6 h-6 text-yellow-500" />
-                            <h2 className="text-xl font-black">Achievements</h2>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {Object.values(BADGES).map(badge => {
-                                const earned = earnedBadges.some(b => b.id === badge.id);
-                                return (
-                                    <div key={badge.id} className={`p-3 rounded-xl border text-center ${earned ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-slate-800/30 border-white/5 opacity-40'}`}>
-                                        <div className="text-3xl mb-1">{badge.icon}</div>
-                                        <div className="text-xs font-bold">{badge.name}</div>
-                                        <div className="text-[11px] text-gray-400">{badge.description}</div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        {nextBadge && (
-                            <div className="mt-5">
-                                <div className="flex justify-between text-sm mb-2">
-                                    <span className="text-gray-400">Next: {nextBadge.badge.name}</span>
-                                    <span className="font-bold text-blue-400">{nextBadge.remaining} more report{nextBadge.remaining === 1 ? '' : 's'}</span>
-                                </div>
-                                <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500" style={{ width: `${nextBadge.progress}%` }} />
-                                </div>
-                            </div>
-                        )}
-                        <p className="text-xs text-gray-500 mt-4">
-                            Reputation: +1 for each confirmation you give, +2 when your report is verified, +5 when it is resolved, −5 if it is marked false.
-                        </p>
-                    </section>
-
-                    <section className="p-6 rounded-2xl bg-slate-900/50 border border-white/10">
-                        <h2 className="text-xl font-black mb-4">Account</h2>
-                        <form onSubmit={handleSave} className="space-y-3">
-                            <label className="block text-xs text-gray-400 space-y-1">
-                                <span>Name</span>
-                                <input className={inputClass} value={form.name} maxLength={50} onChange={e => setForm({ ...form, name: e.target.value })} required />
-                            </label>
-                            <label className="block text-xs text-gray-400 space-y-1">
-                                <span>Email</span>
-                                <input className={`${inputClass} opacity-60`} value={user.email} disabled />
-                            </label>
-                            <label className="block text-xs text-gray-400 space-y-1">
-                                <span>Phone (shared with responders on your reports)</span>
-                                <input className={inputClass} value={form.phone} maxLength={20} onChange={e => setForm({ ...form, phone: e.target.value })} />
-                            </label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <label className="block text-xs text-gray-400 space-y-1">
-                                    <span>Current password</span>
-                                    <input type="password" autoComplete="current-password" className={inputClass} value={form.currentPassword} onChange={e => setForm({ ...form, currentPassword: e.target.value })} />
-                                </label>
-                                <label className="block text-xs text-gray-400 space-y-1">
-                                    <span>New password</span>
-                                    <input type="password" autoComplete="new-password" className={inputClass} value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} />
-                                </label>
-                            </div>
-                            <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold disabled:opacity-50">
-                                <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save changes'}
-                            </button>
-                            <p className="text-xs text-gray-500">Member since {new Date(user.createdAt).toLocaleDateString()}</p>
-                        </form>
-                    </section>
-                </div>
-
-                <section className="p-6 rounded-2xl bg-slate-900/50 border border-white/10">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-black">My reports</h2>
-                        <Link to="/report" className="text-sm text-blue-400 hover:underline">Report an incident</Link>
-                    </div>
+                {/* My reports */}
+                <Section title="Your reports" description="Everything you've reported, with its current status." className="mt-14">
                     {loadingReports ? (
-                        <p className="text-sm text-gray-500">Loading...</p>
+                        <Spinner />
                     ) : myReports.length === 0 ? (
-                        <p className="text-sm text-gray-500">You haven't reported any incidents yet.</p>
+                        <EmptyState icon={Inbox} title="No reports yet" action={<Button to="/report">Report an incident</Button>}>
+                            When you report something, you can follow it here until it's resolved.
+                        </EmptyState>
                     ) : (
-                        <ul className="divide-y divide-white/5">
+                        <motion.ul variants={staggerParent} initial="hidden" animate="show" className="border-t border-line">
                             {myReports.map(r => (
-                                <li key={r._id}>
-                                    <Link to={`/incident/${r._id}`} className="flex items-center justify-between gap-3 py-3 hover:bg-white/5 px-2 rounded-lg">
-                                        <div className="min-w-0">
-                                            <div className="text-sm font-semibold truncate">{r.title}</div>
-                                            <div className="text-xs text-gray-500">{r.type} · {formatRelativeTime(r.createdAt)} · {r.verificationCount} confirmations</div>
+                                <motion.li key={r._id} variants={staggerItem} className="border-b border-line">
+                                    <Link to={`/incident/${r._id}`} className="group flex items-center gap-4 py-4 transition-colors hover:bg-paper-deep/60 sm:px-2">
+                                        <span className="h-9 w-[3px] shrink-0 rounded-full" style={{ background: SEVERITY_COLORS[r.severity] }} />
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate font-medium group-hover:text-signal">{r.title}</div>
+                                            <div className="mt-0.5 text-[13px] text-ink-muted">
+                                                {TYPE_LABELS[r.type]} · {formatRelativeTime(r.createdAt)} · {r.verificationCount} confirmation{r.verificationCount === 1 ? '' : 's'}
+                                            </div>
                                         </div>
-                                        <span className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-bold border ${STATUS_BADGE[r.status]}`}>{STATUS_LABELS[r.status]}</span>
+                                        <StatusTag status={r.status} className="hidden sm:inline-flex" />
+                                        <ChevronRight className="h-4 w-4 text-ink-faint transition-transform group-hover:translate-x-1" />
                                     </Link>
-                                </li>
+                                </motion.li>
                             ))}
-                        </ul>
+                        </motion.ul>
                     )}
-                </section>
-            </div>
-        </div>
+                </Section>
+
+                {/* Achievements */}
+                <Section title="Achievements" description="Earn reputation: +1 per confirmation you give, +2 when your report is verified, +5 when it's resolved, −5 if it's marked false.">
+                    {nextBadge && (
+                        <div className="mb-8 max-w-md">
+                            <div className="mb-2 flex justify-between text-sm">
+                                <span className="text-ink-muted">Next: <span className="font-medium text-ink">{nextBadge.badge.name}</span></span>
+                                <span className="text-ink-muted">{nextBadge.remaining} to go</span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-paper-deep">
+                                <motion.div className="h-full rounded-full bg-signal" initial={{ width: 0 }} animate={{ width: `${nextBadge.progress}%` }} transition={{ duration: 1, ease: EASE }} />
+                            </div>
+                        </div>
+                    )}
+                    <ul className="grid gap-x-10 sm:grid-cols-2 lg:grid-cols-3">
+                        {Object.values(BADGES).map(badge => {
+                            const has = earned.some(b => b.id === badge.id);
+                            return (
+                                <li key={badge.id} className={cx('flex items-center gap-4 border-b border-line py-4', !has && 'opacity-40')}>
+                                    <span className={cx('text-2xl', !has && 'grayscale')} aria-hidden="true">{badge.icon}</span>
+                                    <div className="min-w-0">
+                                        <div className="text-sm font-semibold">{badge.name}</div>
+                                        <div className="text-[13px] text-ink-muted">{badge.description}</div>
+                                    </div>
+                                    {has && <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-sev-low">Earned</span>}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </Section>
+
+                {/* Account */}
+                <Section title="Account" description="Changing your password signs you out everywhere else.">
+                    <form onSubmit={handleSave} className="grid max-w-3xl gap-5 sm:grid-cols-2">
+                        <Field label="Name" htmlFor="p-name">
+                            <Input id="p-name" value={form.name} maxLength={50} onChange={e => setForm({ ...form, name: e.target.value })} required />
+                        </Field>
+                        <Field label="Email" htmlFor="p-email" hint="Contact us to change your email.">
+                            <Input id="p-email" value={user.email} disabled className="opacity-60" />
+                        </Field>
+                        <Field label="Phone" htmlFor="p-phone" hint="Shared with responders on your reports.">
+                            <Input id="p-phone" value={form.phone} maxLength={20} onChange={e => setForm({ ...form, phone: e.target.value })} />
+                        </Field>
+                        <div className="hidden sm:block" />
+                        <Field label="Current password" htmlFor="p-cur">
+                            <Input id="p-cur" type="password" autoComplete="current-password" value={form.currentPassword} onChange={e => setForm({ ...form, currentPassword: e.target.value })} />
+                        </Field>
+                        <Field label="New password" htmlFor="p-new" hint="8+ characters, a letter and a number.">
+                            <Input id="p-new" type="password" autoComplete="new-password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} />
+                        </Field>
+                        <div className="sm:col-span-2">
+                            <Button type="submit" loading={saving}>Save changes</Button>
+                        </div>
+                    </form>
+                </Section>
+            </Container>
+        </PageTransition>
     );
 };
 

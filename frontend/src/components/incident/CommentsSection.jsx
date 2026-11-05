@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Send, MessageCircle, Trash2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ArrowUp, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import useAuthStore from '../../stores/authStore';
 import api, { getErrorMessage } from '../../utils/api';
 import socketService from '../../utils/socket';
-import { ROLE_BADGE } from '../../utils/constants';
 import { formatRelativeTime, sameId } from '../../utils/helpers';
-import toast from 'react-hot-toast';
+import { RoleTag } from '../ui';
+import { EASE } from '../ui/motion';
 
 const CommentsSection = ({ incidentId }) => {
     const { user, isAuthenticated } = useAuthStore();
@@ -17,21 +19,18 @@ const CommentsSection = ({ incidentId }) => {
 
     useEffect(() => {
         let cancelled = false;
-        setIsFetching(true);
         api.get(`/incidents/${incidentId}/comments`)
             .then(res => { if (!cancelled) setComments(res.data.data || []); })
             .catch(() => { if (!cancelled) setComments([]); })
             .finally(() => { if (!cancelled) setIsFetching(false); });
 
-        // Live comments for this incident
+        // Live comments (when real-time is available)
         socketService.emit('join_incident', incidentId);
         const offAdded = socketService.on('comment_added', (comment) => {
             if (comment.incidentId !== incidentId) return;
             setComments(prev => (prev.some(c => c._id === comment._id) ? prev : [comment, ...prev]));
         });
-        const offDeleted = socketService.on('comment_deleted', ({ _id }) => {
-            setComments(prev => prev.filter(c => c._id !== _id));
-        });
+        const offDeleted = socketService.on('comment_deleted', ({ _id }) => setComments(prev => prev.filter(c => c._id !== _id)));
 
         return () => {
             cancelled = true;
@@ -44,7 +43,6 @@ const CommentsSection = ({ incidentId }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!newComment.trim()) return;
-
         setIsSending(true);
         try {
             const response = await api.post(`/incidents/${incidentId}/comments`, { content: newComment.trim() });
@@ -68,79 +66,79 @@ const CommentsSection = ({ incidentId }) => {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center gap-2 text-white">
-                <MessageCircle className="w-5 h-5" />
-                <h3 className="text-lg font-bold">Comments ({comments.length})</h3>
-            </div>
+        <section>
+            <h3 className="eyebrow mb-5">Updates & comments · {comments.length}</h3>
 
             {isAuthenticated ? (
-                <form onSubmit={handleSubmit} className="flex gap-2">
+                <form onSubmit={handleSubmit} className="relative mb-2">
                     <input
                         type="text"
                         value={newComment}
                         maxLength={500}
                         onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Add an update or ask a question..."
-                        className="flex-1 px-4 py-2 bg-slate-900/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all text-sm"
+                        placeholder="Add an update or ask a question…"
+                        aria-label="Comment"
+                        className="field rounded-full py-3 pl-5 pr-14"
                         disabled={isSending}
                     />
                     <button
                         type="submit"
                         disabled={isSending || !newComment.trim()}
                         aria-label="Post comment"
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-xl transition-all flex items-center gap-2 text-sm font-bold"
+                        className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-ink text-paper transition-all hover:scale-105 disabled:scale-90 disabled:opacity-20"
                     >
-                        <Send className="w-4 h-4" />
+                        <ArrowUp className="h-4 w-4" />
                     </button>
                 </form>
             ) : (
-                <div className="p-3 rounded-xl bg-slate-900/50 border border-white/10 text-center text-sm text-gray-400">
-                    <Link to="/login" className="text-blue-400 hover:underline">Log in</Link> to add comments
-                </div>
+                <p className="mb-2 text-sm text-ink-muted">
+                    <Link to="/login" className="link-underline font-medium text-ink">Log in</Link> to post an update.
+                </p>
             )}
 
-            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                {isFetching ? (
-                    <div className="p-4 text-center text-gray-500 text-sm">Loading comments...</div>
-                ) : comments.length === 0 ? (
-                    <div className="p-6 text-center text-gray-500 text-sm">
-                        No comments yet. Be the first to comment!
-                    </div>
-                ) : (
-                    comments.map((comment) => (
-                        <div key={comment._id} className="p-4 rounded-xl bg-slate-900/50 border border-white/10">
-                            <div className="flex items-start justify-between mb-2 gap-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-sm font-bold text-white">
-                                        {comment.userName?.charAt(0).toUpperCase()}
+            {isFetching ? (
+                <p className="py-6 text-sm text-ink-muted">Loading comments…</p>
+            ) : comments.length === 0 ? (
+                <p className="py-6 text-sm text-ink-muted">No updates yet.</p>
+            ) : (
+                <ul>
+                    <AnimatePresence initial={false}>
+                        {comments.map((comment) => (
+                            <motion.li
+                                key={comment._id}
+                                layout
+                                initial={{ opacity: 0, y: -6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.35, ease: EASE }}
+                                className="group flex gap-3 border-b border-line py-4"
+                            >
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper-deep font-display text-sm font-semibold text-ink-soft">
+                                    {comment.userName?.charAt(0).toUpperCase()}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-semibold">{comment.userName}</span>
+                                        <RoleTag role={comment.userRole} />
+                                        <span className="text-[12px] text-ink-faint">{formatRelativeTime(comment.createdAt)}</span>
                                     </div>
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-bold text-white truncate">{comment.userName}</span>
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${ROLE_BADGE[comment.userRole] || ROLE_BADGE.citizen}`}>
-                                                {comment.userRole}
-                                            </span>
-                                        </div>
-                                        <span className="text-xs text-gray-500">{formatRelativeTime(comment.createdAt)}</span>
-                                    </div>
+                                    <p className="mt-1 break-words text-[15px] leading-relaxed text-ink-soft">{comment.content}</p>
                                 </div>
                                 {(sameId(comment.userId, user) || user?.role === 'admin') && (
                                     <button
                                         onClick={() => handleDelete(comment._id)}
-                                        className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                        title="Delete comment"
+                                        className="self-start rounded-full p-1.5 text-ink-faint opacity-0 transition-opacity hover:text-sev-critical focus:opacity-100 group-hover:opacity-100"
+                                        aria-label="Delete comment"
                                     >
-                                        <Trash2 className="w-4 h-4" />
+                                        <Trash2 className="h-4 w-4" />
                                     </button>
                                 )}
-                            </div>
-                            <p className="text-sm text-gray-300 leading-relaxed break-words">{comment.content}</p>
-                        </div>
-                    ))
-                )}
-            </div>
-        </div>
+                            </motion.li>
+                        ))}
+                    </AnimatePresence>
+                </ul>
+            )}
+        </section>
     );
 };
 

@@ -1,45 +1,42 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Calendar, User, TrendingUp, UserCheck, ExternalLink, AlertTriangle, FileDown, CheckCircle, History } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ExternalLink, AlertTriangle, FileDown, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../../stores/authStore';
 import useIncidentStore from '../../stores/incidentStore';
 import CommentsSection from './CommentsSection';
 import StaffActions from './StaffActions';
 import SocialShare from '../common/SocialShare';
-import {
-    STATUS_BADGE, SEVERITY_BADGE, STATUS_LABELS, OPEN_STATUSES, AUTO_VERIFY_THRESHOLD, isStaff
-} from '../../utils/constants';
-import {
-    formatDate, formatCoordinates, formatRelativeTime, mapsLink, hasUserVerified, isReporter, capitalize
-} from '../../utils/helpers';
+import { Button, SeverityTag, StatusTag, TypeTag } from '../ui';
+import { EASE } from '../ui/motion';
+import { STATUS_LABELS, STATUS_COLORS, OPEN_STATUSES, AUTO_VERIFY_THRESHOLD, isStaff } from '../../utils/constants';
+import { formatDate, formatCoordinates, formatRelativeTime, mapsLink, hasUserVerified, isReporter } from '../../utils/helpers';
 
-const InfoTile = ({ icon: Icon, label, children }) => (
-    <div className="bg-slate-800/50 rounded-lg p-4 border border-white/5 min-w-0">
-        <div className="flex items-center gap-2 text-gray-400 mb-1">
-            <Icon className="w-4 h-4" />
-            <span className="text-xs font-semibold">{label}</span>
-        </div>
-        <div className="text-sm text-white break-words">{children}</div>
+// Definition-list row
+const Meta = ({ label, children }) => (
+    <div className="grid grid-cols-[120px_1fr] gap-4 border-b border-line py-3.5 text-sm">
+        <dt className="text-ink-muted">{label}</dt>
+        <dd className="min-w-0 break-words text-ink">{children}</dd>
     </div>
 );
 
 /**
- * Full incident view: details, media, status timeline, verification,
- * staff controls and comments. Used by the modal and the /incident/:id page.
+ * Full incident view: description, metadata, confirmations, media, timeline,
+ * staff controls and comments. Used by the side sheet and /incident/:id.
  */
 const IncidentDetails = ({ incident, onDeleted }) => {
     const { user, isAuthenticated } = useAuthStore();
     const { verifyIncident } = useIncidentStore();
 
-    const canVerify = isAuthenticated &&
-        !isReporter(incident, user) &&
-        !hasUserVerified(incident, user) &&
-        OPEN_STATUSES.includes(incident.status);
+    const verified = hasUserVerified(incident, user);
+    const canVerify = isAuthenticated && !isReporter(incident, user) && !verified && OPEN_STATUSES.includes(incident.status);
+    const count = incident.verificationCount || 0;
+    const link = mapsLink(incident.location?.coordinates);
 
     const handleVerify = async () => {
         const result = await verifyIncident(incident._id);
-        if (result.success) toast.success('Thanks for confirming this incident');
+        if (result.success) toast.success('Thanks for confirming');
         else toast.error(result.error);
     };
 
@@ -48,100 +45,87 @@ const IncidentDetails = ({ incident, onDeleted }) => {
         generateIncidentPDF(incident);
     };
 
-    const link = mapsLink(incident.location?.coordinates);
-
     return (
-        <div className="space-y-6">
-            <div className="flex flex-wrap items-center gap-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${SEVERITY_BADGE[incident.severity]}`}>
-                    {incident.severity?.toUpperCase()}
-                </span>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${STATUS_BADGE[incident.status]}`}>
-                    {STATUS_LABELS[incident.status] || incident.status}
-                </span>
-                <span className="px-3 py-1 rounded-full text-xs font-bold border border-white/10 text-gray-300">
-                    {capitalize(incident.type)}
-                </span>
-                <span className="text-xs text-gray-500 font-mono">#{incident._id?.slice(-8).toUpperCase()}</span>
+        <div className="space-y-10">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <SeverityTag severity={incident.severity} />
+                <StatusTag status={incident.status} />
+                <TypeTag type={incident.type} />
             </div>
 
             {incident.duplicateOf && (
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-sm text-yellow-200">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <p className="flex items-start gap-2.5 border-l-2 border-sev-medium pl-4 text-sm text-ink-soft">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-sev-medium" />
                     <span>
-                        Possible duplicate of{' '}
-                        <Link to={`/incident/${incident.duplicateOf._id || incident.duplicateOf}`} className="underline">
+                        Possibly the same as{' '}
+                        <Link to={`/incident/${incident.duplicateOf._id || incident.duplicateOf}`} className="link-underline font-medium text-ink">
                             {incident.duplicateOf.title || 'an earlier report'}
-                        </Link>{' '}
-                        reported nearby.
+                        </Link>, reported nearby.
                     </span>
-                </div>
+                </p>
             )}
 
-            <div>
-                <h3 className="text-sm font-semibold text-gray-400 mb-2">Description</h3>
-                <p className="text-gray-200 leading-relaxed whitespace-pre-line">{incident.description}</p>
+            <p className="whitespace-pre-line text-[17px] leading-relaxed text-ink-soft">{incident.description}</p>
+
+            {/* Confirmations */}
+            <div className="border-y border-line py-6">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <div className="flex items-baseline gap-2">
+                            <span className="font-display text-3xl font-semibold tabular-nums">{count}</span>
+                            <span className="text-sm text-ink-muted">confirmation{count === 1 ? '' : 's'}</span>
+                        </div>
+                        {incident.status === 'reported' && (
+                            <div className="mt-3 flex items-center gap-1.5" aria-label={`${count} of ${AUTO_VERIFY_THRESHOLD} needed to verify`}>
+                                {Array.from({ length: AUTO_VERIFY_THRESHOLD }).map((_, i) => (
+                                    <motion.span
+                                        key={i}
+                                        className="h-1 w-10 rounded-full"
+                                        initial={false}
+                                        animate={{ backgroundColor: i < count ? '#2F9E6E' : '#E6E3DC' }}
+                                        transition={{ duration: 0.4, ease: EASE }}
+                                    />
+                                ))}
+                                <span className="ml-2 text-[13px] text-ink-muted">auto-verifies at {AUTO_VERIFY_THRESHOLD}</span>
+                            </div>
+                        )}
+                    </div>
+                    {canVerify && (
+                        <Button variant="primary" onClick={handleVerify}><Check className="h-4 w-4" /> I can confirm this</Button>
+                    )}
+                    {verified && <span className="flex items-center gap-1.5 text-sm font-medium text-sev-low"><Check className="h-4 w-4" /> You confirmed this</span>}
+                    {!isAuthenticated && <Link to="/login" className="link-underline text-sm font-medium">Log in to confirm</Link>}
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <InfoTile icon={MapPin} label="Location">
-                    <div>{incident.location?.address || 'No address given'}</div>
-                    <div className="text-xs text-gray-400 mt-1">{formatCoordinates(incident.location?.coordinates)}</div>
+            <dl>
+                <Meta label="Location">
+                    {incident.location?.address || 'Pinned on map'}
+                    <div className="mt-0.5 font-mono text-[12px] text-ink-faint">{formatCoordinates(incident.location?.coordinates)}</div>
                     {link && (
-                        <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-400 hover:underline mt-1">
-                            Open in Maps <ExternalLink className="w-3 h-3" />
+                        <a href={link} target="_blank" rel="noopener noreferrer" className="link-underline mt-1 inline-flex items-center gap-1 text-[13px] font-medium">
+                            Open in Google Maps <ExternalLink className="h-3 w-3" />
                         </a>
                     )}
-                </InfoTile>
-                <InfoTile icon={Calendar} label="Reported">
-                    {formatDate(incident.createdAt)}
-                    <div className="text-xs text-gray-400">{formatRelativeTime(incident.createdAt)}</div>
-                </InfoTile>
-                <InfoTile icon={User} label="Reporter">
+                </Meta>
+                <Meta label="Reported">{formatDate(incident.createdAt)} <span className="text-ink-muted">· {formatRelativeTime(incident.createdAt)}</span></Meta>
+                <Meta label="Reporter">
                     {incident.reporter?.name || 'Anonymous'}
-                    {incident.reporter?.contact && <div className="text-xs text-gray-400">{incident.reporter.contact}</div>}
-                </InfoTile>
-                <InfoTile icon={UserCheck} label="Assigned responder">
-                    {incident.assignedTo?.name || 'Not assigned yet'}
-                </InfoTile>
-            </div>
-
-            {/* Community verification */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-800/50 border border-white/5">
-                <div className="flex items-center gap-2 text-sm text-gray-300">
-                    <TrendingUp className="w-4 h-4 text-emerald-400" />
-                    <span>
-                        <strong className="text-white">{incident.verificationCount || 0}</strong> confirmation(s)
-                        {incident.status === 'reported' && (
-                            <span className="text-gray-500"> · auto-verified at {AUTO_VERIFY_THRESHOLD}</span>
-                        )}
-                    </span>
-                </div>
-                {canVerify && (
-                    <button onClick={handleVerify} className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 text-green-300 rounded-lg text-xs font-bold">
-                        <CheckCircle className="w-4 h-4" /> I can confirm this
-                    </button>
-                )}
-                {hasUserVerified(incident, user) && (
-                    <span className="text-xs text-green-400 font-bold">You confirmed this incident</span>
-                )}
-                {!isAuthenticated && (
-                    <Link to="/login" className="text-xs text-blue-400 hover:underline">Log in to confirm</Link>
-                )}
-            </div>
+                    {incident.reporter?.contact && <span className="text-ink-muted"> · {incident.reporter.contact}</span>}
+                </Meta>
+                <Meta label="Responder">{incident.assignedTo?.name || <span className="text-ink-muted">Not assigned yet</span>}</Meta>
+            </dl>
 
             {incident.media?.length > 0 && (
                 <div>
-                    <h3 className="text-sm font-semibold text-gray-400 mb-2">Media</h3>
+                    <h3 className="eyebrow mb-4">Evidence</h3>
                     <div className="grid grid-cols-2 gap-2">
-                        {incident.media.map((item, idx) => (
-                            item.type === 'video' ? (
-                                <video key={idx} src={item.url} controls className="w-full h-48 object-cover rounded-lg bg-black" />
-                            ) : (
-                                <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer">
-                                    <img src={item.url} alt={`Incident evidence ${idx + 1}`} className="w-full h-48 object-cover rounded-lg" loading="lazy" />
-                                </a>
-                            )
+                        {incident.media.map((item, idx) => item.type === 'video' ? (
+                            <video key={idx} src={item.url} controls className="aspect-[4/3] w-full rounded-lg bg-ink object-cover" />
+                        ) : (
+                            <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer" className="group overflow-hidden rounded-lg">
+                                <img src={item.url} alt={`Evidence ${idx + 1}`} loading="lazy" className="aspect-[4/3] w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" />
+                            </a>
                         ))}
                     </div>
                 </div>
@@ -149,18 +133,20 @@ const IncidentDetails = ({ incident, onDeleted }) => {
 
             {incident.statusHistory?.length > 0 && (
                 <div>
-                    <h3 className="text-sm font-semibold text-gray-400 mb-2 flex items-center gap-2">
-                        <History className="w-4 h-4" /> Timeline
-                    </h3>
-                    <ol className="relative border-l border-white/10 ml-2 space-y-3">
+                    <h3 className="eyebrow mb-5">Timeline</h3>
+                    <ol className="relative ml-1 space-y-6 border-l border-line pl-6">
                         {incident.statusHistory.map((entry, idx) => (
-                            <li key={entry._id || idx} className="ml-4">
-                                <span className="absolute -left-1.5 w-3 h-3 rounded-full bg-blue-500 border-2 border-slate-900" />
-                                <div className="text-sm text-white">{STATUS_LABELS[entry.status] || entry.status}</div>
-                                <div className="text-xs text-gray-500">
-                                    {entry.changedByName || 'System'} · {formatDate(entry.timestamp)}
-                                </div>
-                            </li>
+                            <motion.li
+                                key={entry._id || idx}
+                                initial={{ opacity: 0, x: -6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.4, ease: EASE, delay: idx * 0.06 }}
+                                className="relative"
+                            >
+                                <span className="absolute -left-[29px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-paper" style={{ background: STATUS_COLORS[entry.status] }} />
+                                <div className="text-sm font-medium">{STATUS_LABELS[entry.status] || entry.status}</div>
+                                <div className="mt-0.5 text-[13px] text-ink-muted">{entry.changedByName || 'System'} · {formatDate(entry.timestamp)}</div>
+                            </motion.li>
                         ))}
                     </ol>
                 </div>
@@ -168,11 +154,9 @@ const IncidentDetails = ({ incident, onDeleted }) => {
 
             {isStaff(user) && <StaffActions incident={incident} onDeleted={onDeleted} />}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
                 <SocialShare incident={incident} />
-                <button onClick={handlePdf} className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg text-xs font-bold text-gray-200">
-                    <FileDown className="w-4 h-4" /> Download PDF
-                </button>
+                <Button variant="ghost" size="sm" onClick={handlePdf}><FileDown className="h-4 w-4" /> Download PDF</Button>
             </div>
 
             <CommentsSection incidentId={incident._id} />

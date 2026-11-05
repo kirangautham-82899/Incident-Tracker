@@ -1,131 +1,88 @@
-import React, { useState } from 'react';
-import { MapPin, Clock, CheckCircle, AlertTriangle, User, Shield, AlertOctagon, Eye, Flame, Wrench, HelpCircle, UserCheck } from 'lucide-react';
-import { formatRelativeTime } from '../../utils/helpers';
-import { hasUserVerified, isReporter } from '../../utils/helpers';
-import { STATUS_BADGE, STATUS_LABELS, SEVERITY_BAR, OPEN_STATUSES } from '../../utils/constants';
+import React from 'react';
+import { motion } from 'motion/react';
+import { ChevronRight, Check, MapPin, UserCheck } from 'lucide-react';
 import useAuthStore from '../../stores/authStore';
-import IncidentDetailModal from './IncidentDetailModal';
-import SocialShare from '../common/SocialShare';
+import { formatRelativeTime, hasUserVerified, isReporter } from '../../utils/helpers';
+import { OPEN_STATUSES, SEVERITY_COLORS, TYPE_LABELS } from '../../utils/constants';
+import { StatusTag, SeverityTag, cx } from '../ui';
+import { EASE } from '../ui/motion';
 
-const TYPE_STYLES = {
-    accident: { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20', icon: AlertOctagon },
-    fire: { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', icon: Flame },
-    medical: { color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', icon: Shield },
-    infrastructure: { color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', icon: Wrench },
-    safety: { color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', icon: AlertTriangle },
-    other: { color: 'text-gray-400', bg: 'bg-gray-500/10', border: 'border-gray-500/20', icon: HelpCircle }
-};
-
-const SEVERITY_TEXT = {
-    critical: 'text-red-400 animate-pulse',
-    high: 'text-orange-400',
-    medium: 'text-yellow-400',
-    low: 'text-green-400'
-};
-
-const IncidentCard = ({ incident, onVerify }) => {
+/**
+ * One incident as a list row (no card chrome): severity rule on the left,
+ * title + meta in the middle, status and confirm action on the right.
+ */
+const IncidentRow = ({ incident, onOpen, onVerify }) => {
     const { isAuthenticated, user } = useAuthStore();
-    const [showDetails, setShowDetails] = useState(false);
-
     const verified = hasUserVerified(incident, user);
     const canVerify = isAuthenticated && !verified && !isReporter(incident, user) && OPEN_STATUSES.includes(incident.status);
-    const typeStyle = TYPE_STYLES[incident.type] || TYPE_STYLES.other;
-    const TypeIcon = typeStyle.icon;
+    const closed = !OPEN_STATUSES.includes(incident.status);
 
     return (
-        <div className="group relative bg-slate-800/40 backdrop-blur-xl border border-white/10 rounded-2xl p-5 hover:bg-slate-800/60 transition-all duration-300 overflow-hidden flex flex-col">
-            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${SEVERITY_BAR[incident.severity] || SEVERITY_BAR.medium}`} />
+        <motion.li
+            layout="position"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.4, ease: EASE }}
+            className="group relative border-b border-line"
+        >
+            <div
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpen(incident)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen(incident))}
+                className="flex cursor-pointer items-stretch gap-4 py-5 pr-2 transition-colors duration-200 hover:bg-paper-deep/60 sm:gap-6 sm:pl-2"
+            >
+                <span
+                    className={cx('w-[3px] shrink-0 rounded-full transition-all duration-300 group-hover:w-1.5', closed && 'opacity-30')}
+                    style={{ background: SEVERITY_COLORS[incident.severity] }}
+                />
 
-            <div className="flex justify-between items-start gap-3 mb-3">
-                <div className="flex gap-3 min-w-0">
-                    <div className={`p-2.5 h-fit rounded-xl ${typeStyle.bg} ${typeStyle.color} border ${typeStyle.border}`}>
-                        <TypeIcon className="w-5 h-5" />
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <SeverityTag severity={incident.severity} />
+                        <span className="text-[13px] text-ink-faint">{TYPE_LABELS[incident.type]}</span>
+                        <span className="font-mono text-[11px] text-ink-faint">#{incident._id.slice(-6).toUpperCase()}</span>
                     </div>
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className={`text-xs font-bold uppercase tracking-wider ${SEVERITY_TEXT[incident.severity] || 'text-blue-400'}`}>
-                                {incident.severity}
+                    <h3 className={cx('mt-1.5 text-[17px] font-semibold leading-snug tracking-tight transition-colors group-hover:text-signal', closed && 'text-ink-muted')}>
+                        {incident.title}
+                    </h3>
+                    <p className="mt-1 line-clamp-1 text-sm text-ink-muted">{incident.description}</p>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink-faint">
+                        <span>{formatRelativeTime(incident.createdAt)}</span>
+                        {incident.location?.address && (
+                            <span className="flex min-w-0 items-center gap-1"><MapPin className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{incident.location.address}</span></span>
+                        )}
+                        {incident.assignedTo?.name && (
+                            <span className="flex items-center gap-1"><UserCheck className="h-3.5 w-3.5" />{incident.assignedTo.name}</span>
+                        )}
+                        <span>by {incident.reporter?.name || 'Anonymous'}</span>
+                    </div>
+                </div>
+
+                <div className="flex shrink-0 flex-col items-end justify-between gap-3">
+                    <StatusTag status={incident.status} />
+                    <div className="flex items-center gap-2">
+                        {canVerify ? (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onVerify(incident._id); }}
+                                title="Confirm you can see this incident too"
+                                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-medium text-ink-soft ring-1 ring-inset ring-line-strong transition-all hover:bg-ink hover:text-paper hover:ring-ink"
+                            >
+                                <Check className="h-3.5 w-3.5" /> Confirm
+                                <span className="tabular-nums text-ink-faint">{incident.verificationCount || 0}</span>
+                            </button>
+                        ) : (
+                            <span className={cx('inline-flex items-center gap-1 text-[13px] tabular-nums', verified ? 'font-medium text-sev-low' : 'text-ink-faint')} title={verified ? 'You confirmed this' : 'Confirmations'}>
+                                <Check className="h-3.5 w-3.5" /> {incident.verificationCount || 0}
                             </span>
-                            <span className="text-slate-600 text-xs">•</span>
-                            <span className="text-slate-400 text-xs font-mono">#{incident._id.slice(-6).toUpperCase()}</span>
-                        </div>
-                        <h3 className="text-base font-bold text-white leading-tight break-words">
-                            {incident.title}
-                        </h3>
+                        )}
+                        <ChevronRight className="h-4 w-4 text-ink-faint transition-transform duration-300 group-hover:translate-x-1 group-hover:text-ink" />
                     </div>
                 </div>
-
-                <span className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_BADGE[incident.status]}`}>
-                    {STATUS_LABELS[incident.status] || incident.status}
-                </span>
             </div>
-
-            <p className="text-gray-400 text-sm leading-relaxed mb-4 line-clamp-3">
-                {incident.description}
-            </p>
-
-            <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-400">
-                <div className="flex items-center gap-2 bg-slate-900/50 p-2 rounded-lg border border-white/5 min-w-0">
-                    <MapPin className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span className="truncate">{incident.location?.address || 'Pinned on map'}</span>
-                </div>
-                <div className="flex items-center gap-2 bg-slate-900/50 p-2 rounded-lg border border-white/5">
-                    <Clock className="w-4 h-4 text-purple-500 shrink-0" />
-                    <span>{formatRelativeTime(incident.createdAt)}</span>
-                </div>
-                {incident.assignedTo?.name && (
-                    <div className="col-span-2 flex items-center gap-2 bg-slate-900/50 p-2 rounded-lg border border-white/5">
-                        <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span className="truncate">Responder: {incident.assignedTo.name}</span>
-                    </div>
-                )}
-            </div>
-
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/5">
-                <div className="flex items-center gap-2 text-gray-500 min-w-0">
-                    <User className="w-4 h-4 shrink-0" />
-                    <span className="text-xs truncate">{incident.reporter?.name || 'Anonymous'}</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <SocialShare incident={incident} compact />
-
-                    <button
-                        onClick={() => setShowDetails(true)}
-                        className="px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 border border-white/10 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5"
-                    >
-                        <Eye className="w-3 h-3" />
-                        Details
-                    </button>
-
-                    {canVerify ? (
-                        <button
-                            onClick={() => onVerify(incident._id)}
-                            title="Confirm you can see this incident too"
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 text-green-400 rounded-lg text-xs font-bold transition-all"
-                        >
-                            <CheckCircle className="w-3 h-3" />
-                            Confirm ({incident.verificationCount || 0})
-                        </button>
-                    ) : (
-                        <span
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border ${verified ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'text-gray-400 border-white/10'}`}
-                            title={verified ? 'You confirmed this incident' : 'Confirmations'}
-                        >
-                            <CheckCircle className="w-3 h-3" />
-                            {incident.verificationCount || 0}
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            <IncidentDetailModal
-                incident={incident}
-                isOpen={showDetails}
-                onClose={() => setShowDetails(false)}
-            />
-        </div>
+        </motion.li>
     );
 };
 
-export default IncidentCard;
+export default IncidentRow;

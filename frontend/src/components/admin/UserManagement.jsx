@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Search, RefreshCw } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Search, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getErrorMessage } from '../../utils/api';
 import useAuthStore from '../../stores/authStore';
-import { ROLE_BADGE } from '../../utils/constants';
 import { formatRelativeTime, sameId } from '../../utils/helpers';
+import { EmptyState, RoleTag, Select, Spinner, cx } from '../ui';
+import { EASE } from '../ui/motion';
 
 /**
  * Admin-only: promote citizens to responders/admins and deactivate accounts.
@@ -17,7 +19,6 @@ const UserManagement = () => {
     const [loading, setLoading] = useState(true);
 
     const load = useCallback(async () => {
-        setLoading(true);
         try {
             const res = await api.get('/users', { params: { search: search || undefined, role: roleFilter || undefined } });
             setUsers(res.data.data);
@@ -44,85 +45,80 @@ const UserManagement = () => {
     };
 
     return (
-        <div className="h-full flex flex-col p-4 md:p-6 min-h-0">
-            <div className="flex flex-wrap items-center gap-3 mb-4">
-                <div className="relative flex-1 min-w-[200px]">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                    <input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search name or email"
-                        className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:border-blue-500 outline-none"
-                    />
+        <div>
+            <div className="flex flex-wrap items-center gap-3 pb-5">
+                <div className="relative min-w-[220px] flex-1">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+                    <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or email" aria-label="Search users" className="field pl-10" />
                 </div>
-                <select aria-label="Filter by role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm">
+                <Select aria-label="Filter by role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="w-auto">
                     <option value="">All roles</option>
                     <option value="citizen">Citizens</option>
                     <option value="responder">Responders</option>
                     <option value="admin">Admins</option>
-                </select>
-                <button onClick={load} aria-label="Refresh users" className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5">
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+                </Select>
             </div>
 
-            <div className="flex-1 overflow-auto rounded-xl border border-white/5 bg-slate-900/50">
-                <table className="w-full text-left min-w-[720px]">
-                    <thead className="sticky top-0 bg-slate-900">
-                        <tr className="text-xs text-gray-500">
-                            <th className="p-3 border-b border-white/10">User</th>
-                            <th className="p-3 border-b border-white/10">Role</th>
-                            <th className="p-3 border-b border-white/10">Reports / Confirms</th>
-                            <th className="p-3 border-b border-white/10">Reputation</th>
-                            <th className="p-3 border-b border-white/10">Joined</th>
-                            <th className="p-3 border-b border-white/10 text-right">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
+            {loading ? (
+                <Spinner label="Loading users" />
+            ) : users.length === 0 ? (
+                <EmptyState icon={Users} title="No users found">Try a different search.</EmptyState>
+            ) : (
+                <ul className="border-t border-line">
+                    <AnimatePresence initial={false}>
                         {users.map(u => {
                             const self = sameId(u, me);
                             return (
-                                <tr key={u._id} className={`hover:bg-white/5 ${u.isActive ? '' : 'opacity-50'}`}>
-                                    <td className="p-3">
-                                        <div className="text-sm font-semibold text-white">{u.name}{self && ' (you)'}</div>
-                                        <div className="text-xs text-gray-500">{u.email}</div>
-                                    </td>
-                                    <td className="p-3">
-                                        {self ? (
-                                            <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${ROLE_BADGE[u.role]}`}>{u.role}</span>
-                                        ) : (
-                                            <select
-                                                aria-label={`Role for ${u.name}`}
-                                                value={u.role}
-                                                onChange={(e) => update(u, { role: e.target.value }, `${u.name} is now ${e.target.value}`)}
-                                                className="px-2 py-1 bg-slate-800 border border-white/10 rounded text-xs"
-                                            >
-                                                <option value="citizen">Citizen</option>
-                                                <option value="responder">Responder</option>
-                                                <option value="admin">Admin</option>
-                                            </select>
-                                        )}
-                                    </td>
-                                    <td className="p-3 text-sm text-gray-300">{u.incidentsReported} / {u.incidentsVerified}</td>
-                                    <td className="p-3 text-sm text-yellow-300">{u.reputation}</td>
-                                    <td className="p-3 text-xs text-gray-500">{formatRelativeTime(u.createdAt)}</td>
-                                    <td className="p-3 text-right">
-                                        {!self && (
-                                            <button
-                                                onClick={() => update(u, { isActive: !u.isActive }, u.isActive ? 'Account deactivated' : 'Account reactivated')}
-                                                className={`px-3 py-1 rounded-lg text-xs font-bold border ${u.isActive ? 'border-red-500/30 text-red-300 hover:bg-red-500/10' : 'border-green-500/30 text-green-300 hover:bg-green-500/10'}`}
-                                            >
-                                                {u.isActive ? 'Deactivate' : 'Reactivate'}
-                                            </button>
-                                        )}
-                                    </td>
-                                </tr>
+                                <motion.li
+                                    key={u._id}
+                                    layout
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: u.isActive ? 1 : 0.45 }}
+                                    transition={{ duration: 0.3, ease: EASE }}
+                                    className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-line py-4"
+                                >
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-paper-deep font-display text-sm font-semibold">
+                                        {u.name.charAt(0).toUpperCase()}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="truncate font-medium">{u.name}{self && <span className="text-ink-muted"> (you)</span>}</span>
+                                            {!u.isActive && <span className="font-mono text-[10px] uppercase tracking-wider text-sev-critical">Deactivated</span>}
+                                        </div>
+                                        <div className="truncate text-[13px] text-ink-muted">{u.email}</div>
+                                    </div>
+                                    <div className="hidden w-40 text-[13px] text-ink-muted md:block">
+                                        {u.incidentsReported} reports · {u.incidentsVerified} confirms
+                                        <div>{u.reputation} reputation · joined {formatRelativeTime(u.createdAt)}</div>
+                                    </div>
+                                    {self ? (
+                                        <RoleTag role={u.role} />
+                                    ) : (
+                                        <Select
+                                            aria-label={`Role for ${u.name}`}
+                                            value={u.role}
+                                            onChange={(e) => update(u, { role: e.target.value }, `${u.name} is now a ${e.target.value}`)}
+                                            className="w-36 py-2 text-sm"
+                                        >
+                                            <option value="citizen">Citizen</option>
+                                            <option value="responder">Responder</option>
+                                            <option value="admin">Admin</option>
+                                        </Select>
+                                    )}
+                                    {!self && (
+                                        <button
+                                            onClick={() => update(u, { isActive: !u.isActive }, u.isActive ? 'Account deactivated' : 'Account reactivated')}
+                                            className={cx('w-24 text-right text-[13px] font-medium', u.isActive ? 'text-ink-muted hover:text-sev-critical' : 'text-sev-low hover:underline')}
+                                        >
+                                            {u.isActive ? 'Deactivate' : 'Reactivate'}
+                                        </button>
+                                    )}
+                                </motion.li>
                             );
                         })}
-                    </tbody>
-                </table>
-                {!loading && users.length === 0 && <div className="p-10 text-center text-sm text-gray-500">No users found.</div>}
-            </div>
+                    </AnimatePresence>
+                </ul>
+            )}
         </div>
     );
 };

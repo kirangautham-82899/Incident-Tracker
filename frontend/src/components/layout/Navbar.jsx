@@ -1,216 +1,215 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Siren, Menu, X, LogOut, Plus, Shield, ChevronRight, Activity, Map as MapIcon, BarChart3, Radio } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
+import { Menu, X, Plus, LogOut, User } from 'lucide-react';
 import useAuthStore from '../../stores/authStore';
 import { isStaff } from '../../utils/constants';
-
-import Button from '../common/Button';
+import { Button, cx } from '../ui';
+import { EASE } from '../ui/motion';
 import SOSButton from '../common/SOSButton';
 
-const Navbar = ({ transparent = false }) => {
+export const Logo = ({ className = '' }) => (
+    <Link to="/" className={cx('group flex items-center gap-2.5', className)} aria-label="Incident Tracker home">
+        <span className="relative flex h-7 w-7 items-center justify-center">
+            <span className="absolute inset-0 rounded-full bg-signal/15 transition-transform duration-500 ease-out group-hover:scale-125" />
+            <span className="relative h-2.5 w-2.5 rounded-full bg-signal" />
+            <span className="absolute h-2.5 w-2.5 animate-pulse-dot rounded-full bg-signal" />
+        </span>
+        <span className="font-display text-[17px] font-semibold tracking-tight">
+            Incident<span className="font-serif text-[19px] font-normal italic text-ink-soft">tracker</span>
+        </span>
+    </Link>
+);
+
+const NAV_LINKS = [
+    { to: '/dashboard', label: 'Live feed' },
+    { to: '/map', label: 'Map' },
+    { to: '/analytics', label: 'Analytics' }
+];
+
+const Navbar = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [scrolled, setScrolled] = useState(false);
     const { isAuthenticated, user, logout } = useAuthStore();
+    // Menus remember the path they were opened on, so navigating closes them
+    const [openOn, setOpenOn] = useState(null);
+    const [menuOpenOn, setMenuOpenOn] = useState(null);
+    const open = openOn === location.pathname;
+    const menuOpen = menuOpenOn === location.pathname;
+    const setOpen = (fn) => setOpenOn(prev => ((typeof fn === 'function' ? fn(prev === location.pathname) : fn) ? location.pathname : null));
+    const setMenuOpen = (fn) => setMenuOpenOn(prev => ((typeof fn === 'function' ? fn(prev === location.pathname) : fn) ? location.pathname : null));
+    const [scrolled, setScrolled] = useState(false);
+    const menuRef = useRef(null);
 
-    // Handle scroll effect
+    const links = isStaff(user) ? [...NAV_LINKS, { to: '/admin', label: 'Command' }] : NAV_LINKS;
+
     useEffect(() => {
-        const handleScroll = () => {
-            setScrolled(window.scrollY > 20);
-        };
-        window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
+        const onScroll = () => setScrolled(window.scrollY > 8);
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
     }, []);
+
+    // Close the account menu on outside click
+    useEffect(() => {
+        if (!menuOpen) return undefined;
+        const onClick = (e) => !menuRef.current?.contains(e.target) && setMenuOpenOn(null);
+        document.addEventListener('mousedown', onClick);
+        return () => document.removeEventListener('mousedown', onClick);
+    }, [menuOpen]);
+
+    useEffect(() => {
+        document.body.style.overflow = open ? 'hidden' : '';
+        return () => { document.body.style.overflow = ''; };
+    }, [open]);
 
     const handleLogout = () => {
         logout();
-        setIsMenuOpen(false);
         navigate('/');
     };
 
-    const go = (to) => {
-        setIsMenuOpen(false);
-        navigate(to);
-    };
-
-    // Determine navbar styling based on state
-    const isTransparent = transparent && !scrolled && !isMenuOpen;
-
-    const navClasses = `fixed w-full top-0 z-50 transition-all duration-300 ${isTransparent
-        ? 'bg-transparent border-transparent py-4'
-        : 'bg-slate-900/80 backdrop-blur-xl shadow-lg border-b border-white/10 py-2'
-        } `;
-
-    const textClass = isTransparent ? 'text-white' : 'text-gray-100';
-    const subTextClass = isTransparent ? 'text-blue-200' : 'text-gray-400';
-
-    // Plain render helper (not a component) so it isn't re-created as a new component type each render
-    const navLink = (to, children, Icon) => {
-        const isActive = location.pathname === to;
-        return (
-            <Link
-                to={to}
-                className={`flex items-center gap-2 text-sm font-medium transition-all px-3 py-2 rounded-lg group
-                    ${isActive
-                        ? 'text-blue-400 bg-blue-500/10'
-                        : `${textClass} hover:text-blue-400 hover:bg-white/5`
-                    } `}
-            >
-                {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-blue-400' : 'text-gray-400 group-hover:text-blue-400'} transition-colors`} />}
-                {children}
-            </Link>
-        );
-    };
-
     return (
-        <nav className={navClasses}>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between items-center h-16">
-                    {/* Brand Logo - Animated */}
-                    <Link to="/" className="flex items-center gap-3 group">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-blue-500 blur-lg opacity-40 group-hover:opacity-60 transition-opacity rounded-full"></div>
-                            <div className="relative bg-gradient-to-br from-blue-600 to-indigo-600 p-2.5 rounded-xl shadow-lg border border-white/10 transform group-hover:scale-105 transition-transform duration-300">
-                                <Siren className="w-6 h-6 text-white animate-pulse" />
-                            </div>
-                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-slate-900 animate-ping"></div>
-                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-slate-900"></div>
-                        </div>
-                        <div>
-                            <h1 className={`text-xl font-black tracking-tight ${textClass} group-hover:text-blue-400 transition-colors`}>
-                                Incident<span className="text-blue-500">Tracker</span>
-                            </h1>
-                            <p className={`text-[10px] uppercase tracking-widest font-semibold ${subTextClass}`}>Live Response</p>
-                        </div>
-                    </Link>
+        <header
+            className={cx(
+                'sticky top-0 z-[1100] transition-[background-color,border-color,backdrop-filter] duration-300',
+                scrolled || open ? 'border-b border-line bg-paper/85 backdrop-blur-xl' : 'border-b border-transparent bg-paper/0'
+            )}
+        >
+            <nav className="mx-auto flex h-16 max-w-page items-center justify-between gap-6 px-5 sm:px-8" aria-label="Main">
+                <Logo />
 
-                    {/* Desktop Navigation */}
-                    <div className="hidden lg:flex items-center gap-2">
-
-
-                        {isAuthenticated && <SOSButton />}
-
-                        {navLink('/dashboard', 'Live Feed', Activity)}
-                        {navLink('/map', 'Map', MapIcon)}
-                        {navLink('/analytics', 'Analytics', BarChart3)}
-                        {isStaff(user) && navLink('/admin', 'Command', Radio)}
-
-                        <div className="h-6 w-px bg-white/10 mx-2"></div>
-
-                        {isAuthenticated ? (
-                            <div className="flex items-center gap-3">
-                                <Link to="/profile" title="My profile" className="flex items-center gap-3 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10">
-                                    <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
-                                        {user?.name?.charAt(0)}
-                                    </div>
-                                    <span className={`text-sm font-medium ${textClass}`}>{user?.name}</span>
-                                </Link>
-
-                                <Button
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={() => navigate('/report')}
-                                    className="shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-shadow"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Report
-                                </Button>
-
-                                <button
-                                    onClick={handleLogout}
-                                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${textClass}`}
-                                    title="Logout"
-                                >
-                                    <LogOut className="w-5 h-5" />
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-3">
-                                <Link to="/login">
-                                    <button className={`px-4 py-2 text-sm font-semibold transition-colors ${textClass} hover:text-blue-400`}>
-                                        Login
-                                    </button>
-                                </Link>
-                                <Link to="/signup">
-                                    <button className="group relative px-5 py-2 rounded-lg bg-blue-600 overflow-hidden transition-all hover:bg-blue-500 shadow-lg shadow-blue-500/25">
-                                        <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
-                                        <span className="relative flex items-center gap-2 text-white font-bold text-sm">
-                                            Get Started
-                                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                        </span>
-                                    </button>
-                                </Link>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Mobile Menu Button */}
-                    <button
-                        onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        className={`lg:hidden p-2 rounded-xl transition-all ${isMenuOpen ? 'bg-white/10 text-white' : `${textClass} hover:bg-white/10`
-                            } `}
-                    >
-                        {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-                    </button>
+                <div className="hidden items-center gap-1 lg:flex">
+                    {links.map(link => (
+                        <NavLink key={link.to} to={link.to} className="relative px-3.5 py-2 text-sm font-medium">
+                            {({ isActive }) => (
+                                <>
+                                    {isActive && (
+                                        <motion.span
+                                            layoutId="nav-pill"
+                                            className="absolute inset-0 rounded-full bg-paper-deep"
+                                            transition={{ type: 'spring', stiffness: 400, damping: 34 }}
+                                        />
+                                    )}
+                                    <span className={cx('relative transition-colors', isActive ? 'text-ink' : 'text-ink-muted hover:text-ink')}>
+                                        {link.label}
+                                    </span>
+                                </>
+                            )}
+                        </NavLink>
+                    ))}
                 </div>
-            </div>
 
-            {/* Mobile Navigation Dropdown */}
-            <div className={`lg:hidden absolute w-full bg-slate-900/95 backdrop-blur-xl border-t border-white/10 transition-all duration-300 ease-in-out origin-top ${isMenuOpen ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0 h-0'
-                } `}>
-                <div className="px-4 py-6 space-y-4">
-                    <div className="grid grid-cols-2 gap-2">
-                        {[['/dashboard', 'Live Feed'], ['/map', 'Map'], ['/analytics', 'Analytics'], ['/report', 'Report Incident'], ...(isStaff(user) ? [['/admin', 'Command']] : [])].map(([to, label]) => (
-                            <button key={to} onClick={() => go(to)} className={`p-3 rounded-xl text-sm font-medium border border-white/10 ${location.pathname === to ? 'bg-blue-500/20 text-blue-300' : 'text-gray-200 hover:bg-white/5'}`}>
-                                {label}
-                            </button>
-                        ))}
-                    </div>
+                <div className="hidden items-center gap-2 lg:flex">
+                    {isAuthenticated && <SOSButton />}
+                    <Button to="/report" size="sm" variant="primary">
+                        <Plus className="h-4 w-4" /> Report
+                    </Button>
                     {isAuthenticated ? (
-                        <>
-                            <div className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-xl border border-white/10">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-sm font-bold text-white shadow-lg">
-                                    {user?.name?.charAt(0)}
-                                </div>
-                                <div>
-                                    <p className="text-white font-bold">{user?.name}</p>
-                                    <p className="text-xs text-gray-400">{user?.email}</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <Button fullWidth variant="primary" onClick={() => go('/report')}>
-                                    <Plus className="w-4 h-4" /> Report
-                                </Button>
-                                <Button fullWidth variant="secondary" onClick={() => go('/profile')}>
-                                    Profile
-                                </Button>
-                            </div>
+                        <div className="relative" ref={menuRef}>
                             <button
-                                onClick={handleLogout}
-                                className="w-full flex items-center justify-center gap-2 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors font-medium"
+                                onClick={() => setMenuOpen(v => !v)}
+                                className="ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-ink font-display text-sm font-semibold text-paper transition-transform hover:scale-105"
+                                aria-label="Account menu"
+                                aria-expanded={menuOpen}
                             >
-                                <LogOut className="w-5 h-5" /> Sign Out
+                                {user?.name?.charAt(0).toUpperCase()}
                             </button>
-                        </>
-                    ) : (
-                        <div className="space-y-3">
-                            <Link to="/login" onClick={() => setIsMenuOpen(false)}>
-                                <button className="w-full p-3 text-gray-300 font-medium hover:text-white transition-colors">
-                                    Log In
-                                </button>
-                            </Link>
-                            <Link to="/signup" onClick={() => setIsMenuOpen(false)}>
-                                <button className="w-full p-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2">
-                                    Get Started Now <ChevronRight className="w-4 h-4" />
-                                </button>
-                            </Link>
+                            <AnimatePresence>
+                                {menuOpen && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                        transition={{ duration: 0.18, ease: EASE }}
+                                        className="absolute right-0 mt-2 w-60 origin-top-right rounded-2xl bg-white p-2 shadow-[0_24px_60px_-20px_rgba(22,22,26,0.35)] ring-1 ring-line"
+                                    >
+                                        <div className="px-3 py-2.5">
+                                            <div className="truncate text-sm font-semibold">{user?.name}</div>
+                                            <div className="truncate text-[13px] text-ink-muted">{user?.email}</div>
+                                        </div>
+                                        <div className="my-1 h-px bg-line" />
+                                        <Link to="/profile" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink">
+                                            <User className="h-4 w-4" /> Profile & reports
+                                        </Link>
+                                        <button onClick={handleLogout} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink">
+                                            <LogOut className="h-4 w-4" /> Sign out
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
+                    ) : (
+                        <>
+                            <Link to="/login" className="link-underline px-2 text-sm font-medium text-ink-soft hover:text-ink">Log in</Link>
+                            <Button to="/signup" size="sm" variant="outline">Sign up</Button>
+                        </>
                     )}
                 </div>
-            </div>
-        </nav>
+
+                <div className="flex items-center gap-2 lg:hidden">
+                    {isAuthenticated && <SOSButton compact />}
+                    <button
+                        onClick={() => setOpen(v => !v)}
+                        className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-paper-deep"
+                        aria-label={open ? 'Close menu' : 'Open menu'}
+                        aria-expanded={open}
+                    >
+                        {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                    </button>
+                </div>
+            </nav>
+
+            {/* Mobile full-screen menu */}
+            <AnimatePresence>
+                {open && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="fixed inset-x-0 bottom-0 top-16 z-[1100] overflow-y-auto bg-paper lg:hidden"
+                    >
+                        <motion.ul
+                            initial="hidden"
+                            animate="show"
+                            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+                            className="px-5 pt-6"
+                        >
+                            {[...links, { to: '/report', label: 'Report an incident' }, ...(isAuthenticated ? [{ to: '/profile', label: 'Profile' }] : [])].map(link => (
+                                <motion.li
+                                    key={link.to}
+                                    variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE } } }}
+                                    className="border-b border-line"
+                                >
+                                    <Link
+                                        to={link.to}
+                                        className={cx('flex items-center justify-between py-5 font-display text-3xl font-semibold tracking-tight', location.pathname === link.to ? 'text-signal' : 'text-ink')}
+                                    >
+                                        {link.label}
+                                    </Link>
+                                </motion.li>
+                            ))}
+                        </motion.ul>
+                        <div className="px-5 py-8">
+                            {isAuthenticated ? (
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="font-semibold">{user?.name}</div>
+                                        <div className="text-sm text-ink-muted">{user?.email}</div>
+                                    </div>
+                                    <Button variant="outline" onClick={handleLogout}><LogOut className="h-4 w-4" /> Sign out</Button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-3">
+                                    <Button to="/login" variant="outline" className="flex-1">Log in</Button>
+                                    <Button to="/signup" className="flex-1">Sign up</Button>
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </header>
     );
 };
 

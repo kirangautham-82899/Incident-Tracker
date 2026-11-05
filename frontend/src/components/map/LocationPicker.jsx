@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 const pinIcon = L.divIcon({
-    html: '<div style="width:22px;height:22px;background:#ef4444;border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,.4)"></div>',
+    html: '<div style="width:22px;height:22px;background:#E5402A;border:3px solid #FAF9F6;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,.4)"></div>',
     className: '',
     iconSize: [22, 22],
     iconAnchor: [11, 22]
@@ -74,7 +74,7 @@ const LocationPicker = ({ value, onChange, height = 260 }) => {
         <div
             ref={containerRef}
             style={{ height }}
-            className="w-full rounded-xl overflow-hidden border border-white/10 z-0"
+            className="z-0 w-full overflow-hidden rounded-2xl ring-1 ring-line"
             aria-label="Click the map to set the incident location"
         />
     );

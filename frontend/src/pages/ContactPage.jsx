@@ -1,127 +1,87 @@
 import React, { useState } from 'react';
-import Navbar from '../components/layout/Navbar';
-import { Mail, MessageSquare, Send, MapPin, Phone } from 'lucide-react';
-import Button from '../components/common/Button';
-import toast from 'react-hot-toast';
+import { ArrowUpRight, Mail, ShieldAlert, Siren } from 'lucide-react';
+import { Button, Container, Field, Input, PageHeader, Select, Textarea } from '../components/ui';
+import { PageTransition, Reveal } from '../components/ui/motion';
+
+const CONTACT_EMAIL = 'kirangautham82899@gmail.com';
+
+const TOPICS = ['General question', 'Account or data deletion', 'Report a problem with an incident', 'Become a responder', 'Security issue'];
 
 const ContactPage = () => {
-    const [isLoading, setIsLoading] = useState(false);
+    const [form, setForm] = useState({ name: '', topic: TOPICS[0], message: '' });
 
+    // Opens the visitor's email app with the message filled in (no message is stored on our servers)
     const handleSubmit = (e) => {
         e.preventDefault();
-        setIsLoading(true);
-        // Simulate API call
-        setTimeout(() => {
-            setIsLoading(false);
-            toast.success("Message sent successfully! We'll verify it shortly.");
-            e.target.reset();
-        }, 1500);
+        const subject = `[Incident Tracker] ${form.topic}`;
+        const body = `${form.message}\n\n— ${form.name}`;
+        window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     };
 
     return (
-        <div className="min-h-screen bg-slate-900 font-sans text-gray-300">
-            <Navbar transparent />
-
-            {/* Header Background */}
-            <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-pink-900/20 to-slate-900 -z-10" />
-
-            <div className="max-w-6xl mx-auto px-6 pt-32 pb-20">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
-
-                    {/* Left Column: Info */}
-                    <div className="animate-fadeIn">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-pink-500/10 border border-pink-500/20 text-pink-400 text-sm font-medium mb-8">
-                            <MessageSquare className="w-4 h-4" />
-                            <span>We're here to help</span>
-                        </div>
-
-                        <h1 className="text-5xl font-bold text-white mb-6">Get in Touch</h1>
-                        <p className="text-xl text-gray-400 mb-12 leading-relaxed">
-                            Have questions about incident reporting? Need technical support? Our team is ready to assist you 24/7.
-                        </p>
-
-                        <div className="space-y-8">
-                            <div className="flex items-center gap-6">
-                                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10">
-                                    <Mail className="w-6 h-6 text-blue-400" />
-                                </div>
-                                <div>
-                                    <h3 className="text-white font-semibold text-lg">Email Support</h3>
-                                    <p className="text-gray-400">help@incidenttracker.org</p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-6">
-                                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10">
-                                    <Phone className="w-6 h-6 text-green-400" />
-                                </div>
-                                <div>
-                                    <h3 className="text-white font-semibold text-lg">Emergency Hotline</h3>
-                                    <p className="text-gray-400">1-800-TRACKER (For app issues only)</p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-6">
-                                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10">
-                                    <MapPin className="w-6 h-6 text-purple-400" />
-                                </div>
-                                <div>
-                                    <h3 className="text-white font-semibold text-lg">Headquarters</h3>
-                                    <p className="text-gray-400">123 Safety Blvd, Tech City, CA 94000</p>
-                                </div>
+        <PageTransition>
+            <Container>
+                <PageHeader
+                    eyebrow="Contact"
+                    title="Get in"
+                    accent="touch."
+                    description="Questions, data requests or want to help as a responder? Send us a message."
+                />
+                <div className="grid gap-16 border-t border-line pt-12 lg:grid-cols-[1fr_1.3fr]">
+                    <Reveal className="space-y-10">
+                        <div className="flex gap-4">
+                            <Siren className="mt-1 h-5 w-5 shrink-0 text-signal" />
+                            <div>
+                                <h2 className="font-semibold">Emergency?</h2>
+                                <p className="mt-1 text-ink-muted">Don't use this form. Call 112 / 911, or use the SOS button after logging in.</p>
                             </div>
                         </div>
-                    </div>
-
-                    {/* Right Column: Form */}
-                    <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl animate-fadeIn" style={{ animationDelay: '0.2s' }}>
-                        <h2 className="text-2xl font-bold text-white mb-6">Send us a message</h2>
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="grid grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-2">First Name</label>
-                                    <input type="text" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="John" required />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-2">Last Name</label>
-                                    <input type="text" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Doe" required />
-                                </div>
-                            </div>
-
+                        <div className="flex gap-4">
+                            <Mail className="mt-1 h-5 w-5 shrink-0 text-ink-muted" />
                             <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-2">Email Address</label>
-                                <input type="email" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="john@example.com" required />
+                                <h2 className="font-semibold">Email</h2>
+                                <a href={`mailto:${CONTACT_EMAIL}`} className="link-underline mt-1 inline-block text-ink-soft">{CONTACT_EMAIL}</a>
                             </div>
-
+                        </div>
+                        <div className="flex gap-4">
+                            <ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-ink-muted" />
                             <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-2">Message</label>
-                                <textarea rows="4" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all resize-none" placeholder="How can we help you?" required></textarea>
+                                <h2 className="font-semibold">Security issues</h2>
+                                <a
+                                    href="https://github.com/kirangautham-82899/Incident-Tracker/security/advisories/new"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="link-underline mt-1 inline-flex items-center gap-1 text-ink-soft"
+                                >
+                                    Report privately on GitHub <ArrowUpRight className="h-3.5 w-3.5" />
+                                </a>
                             </div>
+                        </div>
+                    </Reveal>
 
-                            <Button
-                                type="submit"
-                                variant="primary"
-                                fullWidth
-                                disabled={isLoading}
-                                className="h-12 text-lg font-semibold bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 border-none"
-                            >
-                                {isLoading ? (
-                                    <span className="flex items-center gap-2">
-                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        Sending...
-                                    </span>
-                                ) : (
-                                    <span className="flex items-center justify-center gap-2">
-                                        Send Message
-                                        <Send className="w-5 h-5" />
-                                    </span>
-                                )}
+                    <Reveal delay={0.1}>
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            <div className="grid gap-5 sm:grid-cols-2">
+                                <Field label="Your name" htmlFor="c-name">
+                                    <Input id="c-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={80} />
+                                </Field>
+                                <Field label="Topic" htmlFor="c-topic">
+                                    <Select id="c-topic" value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })}>
+                                        {TOPICS.map(t => <option key={t}>{t}</option>)}
+                                    </Select>
+                                </Field>
+                            </div>
+                            <Field label="Message" htmlFor="c-msg" hint="This opens your email app with the message ready to send.">
+                                <Textarea id="c-msg" rows={6} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} required maxLength={2000} />
+                            </Field>
+                            <Button type="submit" size="lg" disabled={!form.name.trim() || !form.message.trim()}>
+                                Write email <ArrowUpRight className="h-4 w-4" />
                             </Button>
                         </form>
-                    </div>
+                    </Reveal>
                 </div>
-            </div>
-        </div>
+            </Container>
+        </PageTransition>
     );
 };
 

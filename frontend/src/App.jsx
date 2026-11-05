@@ -1,11 +1,13 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
-import Loading from './components/common/Loading';
+import Navbar from './components/layout/Navbar';
+import Footer from './components/layout/Footer';
+import { Spinner } from './components/ui';
 
 // Heavier pages (maps, charts) are loaded on demand
 const ReportPage = lazy(() => import('./pages/ReportPage'));
@@ -103,44 +105,64 @@ const useRealtime = () => {
   }, []);
 };
 
+// Shared chrome (navbar, footer). Keying the outlet by path replays each page's enter animation.
+const AppLayout = ({ bare = false }) => {
+  const location = useLocation();
+  return (
+    <div className="flex min-h-screen flex-col">
+      <Navbar />
+        <div key={location.pathname} className="flex-1">
+          <Suspense fallback={<Spinner className="min-h-[60vh]" />}>
+            <Outlet />
+          </Suspense>
+        </div>
+      {!bare && <Footer />}
+    </div>
+  );
+};
+
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [pathname]);
+  return null;
+};
+
 function App() {
   useRealtime();
 
   return (
-      <BrowserRouter>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: '#1e293b',
-              color: '#f1f5f9',
-              border: '1px solid rgba(255,255,255,0.1)'
-            },
-            success: { iconTheme: { primary: '#10b981', secondary: '#fff' } },
-            error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } }
-          }}
-        />
+    <BrowserRouter>
+      <ScrollToTop />
+      <Toaster
+        position="bottom-center"
+        gutter={10}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#16161A',
+            color: '#FAF9F6',
+            borderRadius: '999px',
+            padding: '10px 18px',
+            fontSize: '14px',
+            boxShadow: '0 20px 40px -20px rgba(22,22,26,0.5)'
+          },
+          success: { iconTheme: { primary: '#2F9E6E', secondary: '#FAF9F6' } },
+          error: { iconTheme: { primary: '#E5402A', secondary: '#FAF9F6' } }
+        }}
+      />
 
-        <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loading text="Loading..." /></div>}>
-        <Routes>
-          {/* Public */}
-          <Route path="/" element={<LandingPage />} />
+      <Routes>
+        {/* Auth pages: full-bleed, no footer */}
+        <Route element={<AppLayout bare />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/report" element={<ReportPage />} />
+        </Route>
+
+        {/* Full-height tools: no footer */}
+        <Route element={<AppLayout bare />}>
           <Route path="/map" element={<MapPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/incident/:id" element={<IncidentDetailPage />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-
-          {/* Logged-in users */}
-          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-
-          {/* Responders and admins */}
           <Route
             path="/admin"
             element={
@@ -149,11 +171,23 @@ function App() {
               </ProtectedRoute>
             }
           />
+        </Route>
 
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-        </Suspense>
-      </BrowserRouter>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/report" element={<ReportPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/incident/:id" element={<IncidentDetailPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
