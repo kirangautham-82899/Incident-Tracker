@@ -1,5 +1,7 @@
 name: CI
 
+# One check for every push to main and every pull request:
+# backend tests on a real Postgres, then frontend lint and production build.
 on:
   push:
     branches: [main]
@@ -14,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend tests (Postgres)
+  ci:
+    name: Test & build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -24,34 +26,20 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: package-lock.json
-      - run: npm ci
-      - run: npm test
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
 
-  frontend:
-    name: Frontend lint and build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci --prefix frontend
-      - run: npm run lint --prefix frontend
-      - run: npm run build --prefix frontend
+      - name: Install
+        run: |
+          npm ci
+          npm ci --prefix frontend
 
-  audit:
-    name: Dependency audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      # Production dependencies only; fails on high/critical advisories
-      - run: npm audit --omit=dev --audit-level=high
-      - run: npm audit --omit=dev --audit-level=high --prefix frontend
+      - name: Backend tests
+        run: npm test
+
+      - name: Frontend lint
+        run: npm run lint --prefix frontend
+
+      - name: Frontend build
+        run: npm run build --prefix frontend

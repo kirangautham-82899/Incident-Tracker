@@ -1,6 +1,10 @@
-# Incident Tracker: Real-Time Incident Reporting Platform
+# Incident Tracker
 
-Citizens report emergencies (fire, medical, accidents, infrastructure, safety) with location and photos. The community confirms reports, and responders triage, assign and resolve them from a prioritised console. Everyone sees updates live on a feed, a map and an analytics dashboard.
+[![CI](https://github.com/kirangautham-82899/Incident-Tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/kirangautham-82899/Incident-Tracker/actions/workflows/ci.yml)
+
+**Live site: https://incident-tracker-alpha.vercel.app**
+
+Real-time incident reporting platform. Citizens report emergencies (fire, medical, accidents, infrastructure, safety) with location and photos. The community confirms reports, and responders triage, assign and resolve them from a prioritised console. Everyone sees updates live on a feed, a map and an analytics dashboard.
 
 ## Features
 
@@ -82,7 +86,7 @@ The frontend uses `frontend/.env.development` for `npm run dev` (API on `localho
 | `SUPABASE_STORAGE_BUCKET` | no | Defaults to `incident-media` |
 | `DB_POOL_SIZE` | no | Default 10; use 1 on serverless |
 | `DB_AUTO_MIGRATE` | no | `false` to skip applying the schema on startup |
-| `FRONTEND_URL` | no | Allowed CORS origins, comma separated (`*.vercel.app` is always allowed) |
+| `FRONTEND_URL` | no | Extra allowed CORS origins, comma separated (the production site and this project's Vercel previews are always allowed) |
 | `PUBLIC_URL` | no | Public API URL, used for links to locally stored uploads |
 
 **Frontend** (build time)
@@ -95,7 +99,7 @@ The frontend uses `frontend/.env.development` for `npm run dev` (API on `localho
 
 ## Deployment (Vercel + Supabase)
 
-The website and the API deploy together as **one Vercel project** from the repo root (same setup as Bazar Buddy):
+The website and the API deploy together as **one Vercel project** (`incident-tracker`) from the repo root. Every push to `main` deploys to production at https://incident-tracker-alpha.vercel.app; pull requests get preview deployments.
 
 - `vercel.json` installs both packages, builds `frontend/` into `frontend/dist`, and serves the Express API from `api/index.js` as a serverless function under `/api/*`.
 - `frontend/.env.production` points the site at the same-origin `/api` and turns off WebSockets. Vercel functions can't hold them, so the feed, map, console and stats refresh every 20 seconds and the community chat is hidden.
@@ -113,17 +117,18 @@ The website and the API deploy together as **one Vercel project** from the repo 
 | `DB_AUTO_MIGRATE` | `false` (run `npm run db:migrate --prefix backend` once instead) |
 | `NODE_ENV` | `production` |
 
-**Deploy:** `npx vercel deploy --prod` from the repo root (or connect the GitHub repo in Vercel → Settings → Git with Root Directory left empty).
+**Deploy:** automatic on push to `main` (the Vercel project is connected to this GitHub repo). Manual deploy: `npx vercel deploy --prod` from the repo root.
 
 **Instant real-time instead of polling:** run `backend/` with `npm start` on a long-running host (Railway, Fly.io, a VM), then build the frontend with `VITE_API_URL=https://<api-host>/api`, `VITE_SOCKET_URL=https://<api-host>` and `VITE_ENABLE_SOCKET=true`.
 
 ## Development workflow
 
 1. Work on a branch and open a pull request (or push small fixes to `main`).
-2. **CI** (`.github/workflows/ci.yml`) runs on every push and PR: backend tests on a real Postgres, frontend lint and build, and `npm audit` of production dependencies. **CodeQL** (`codeql.yml`) scans the code for security issues.
-3. **Vercel** builds a preview for every PR and deploys `main` to production (https://incident-tracker-alpha.vercel.app) automatically. Previews have no database secrets, so their API returns 503; use `npm run dev:local` for full local testing.
-4. **Dependabot** opens weekly PRs for dependency updates.
-5. Database schema changes go in `backend/db/schema.sql` (idempotent). Apply them to Supabase with `npm run db:migrate --prefix backend` **before** merging code that needs them.
+2. Two checks run on every push and PR:
+   - **CI / Test & build** (`.github/workflows/ci.yml`): backend API tests on a real Postgres, then frontend lint and production build.
+   - **Vercel**: preview deployment for PRs, production deployment for `main`. Previews have no database secrets, so their API returns 503; use `npm run dev:local` for full local testing.
+3. Keep dependencies current with `npm outdated` / `npm audit` (root and `frontend/`) and update deliberately. GitHub security alerts flag vulnerable packages.
+4. Database schema changes go in `backend/db/schema.sql` (idempotent). Apply them to Supabase with `npm run db:migrate --prefix backend` **before** merging code that needs them.
 
 See [SECURITY.md](SECURITY.md) for the security model and how to report a vulnerability.
 
@@ -153,7 +158,7 @@ Socket events: `incident_created`, `incident_updated`, `incident_verified`, `inc
 ## Tests
 
 ```bash
-npm test                      # 26 end-to-end API tests on a real (embedded) Postgres
+npm test                      # end-to-end API tests on a real (embedded) Postgres
 npm run lint --prefix frontend
 npm run build --prefix frontend
 ```

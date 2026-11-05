@@ -15,4 +15,4 @@ or email kirangautham82899@gmail.com. You'll get a reply within a few days.
 - **Uploads:** images/videos only, max 10 MB, sent straight to Supabase Storage with one-time signed URLs; reports may only reference files in the project's own storage.
 - **HTTP:** strict Content-Security-Policy, HSTS, frame blocking and other headers on the site (`vercel.json`) and the API (helmet); CORS limited to this project's own origins.
 - **Data exposure:** internal responder notes and reporter contact details are only returned to responders/admins.
-- **Supply chain:** CI runs tests, lint, build and `npm audit`; CodeQL scans the code; Dependabot proposes dependency updates.
+- **Supply chain:** CI runs the test suite, lint and a production build on every change; GitHub security alerts flag vulnerable dependencies.
